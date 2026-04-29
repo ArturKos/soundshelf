@@ -1,0 +1,6 @@
+{
+    "name": "Electronic",
+    "description": "Strong sub-bass and crisp highs",
+    "bands_hz": [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000],
+    "gains_db": [6, 5, 1, 0, -2, 2, 1, 4, 5, 6]
+}

@@ -1,0 +1,36 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SoundShelf
+GenericName=Audio Library and Player
+GenericName[pl]=Biblioteka i odtwarzacz audio
+GenericName[de]=Audio-Bibliothek und -Player
+GenericName[fr]=Bibliothèque et lecteur audio
+Comment=Cross-platform audio catalog with disc support and visualization
+Comment[pl]=Wieloplatformowy katalog audio z obsługą płyt i wizualizacją
+Comment[de]=Plattformübergreifender Audiokatalog mit CD-Unterstützung
+Comment[fr]=Catalogue audio multiplateforme avec prise en charge des disques
+Exec=soundshelf %F
+Icon=soundshelf
+Terminal=false
+Categories=AudioVideo;Audio;Player;Music;Qt;
+MimeType=audio/mpeg;audio/flac;audio/ogg;audio/mp4;audio/x-vorbis+ogg;audio/x-wav;audio/x-ape;audio/x-musepack;audio/x-opus+ogg;application/x-cue;
+StartupNotify=true
+StartupWMClass=SoundShelf
+Keywords=music;audio;player;catalog;library;cd;flac;mp3;
+Actions=PlayPause;Next;Previous;
+
+[Desktop Action PlayPause]
+Name=Play / Pause
+Name[pl]=Odtwarzaj / Pauza
+Exec=soundshelf-cli pause
+
+[Desktop Action Next]
+Name=Next track
+Name[pl]=Następny utwór
+Exec=soundshelf-cli next
+
+[Desktop Action Previous]
+Name=Previous track
+Name[pl]=Poprzedni utwór
+Exec=soundshelf-cli prev

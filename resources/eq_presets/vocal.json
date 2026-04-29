@@ -1,0 +1,6 @@
+{
+    "name": "Vocal",
+    "description": "Boosted mid-range for clarity, softer extremes",
+    "bands_hz": [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000],
+    "gains_db": [-2, -1, 1, 3, 4, 4, 3, 2, 1, -1]
+}

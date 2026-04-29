@@ -1,0 +1,47 @@
+SoundShelf — Cross-platform audio catalog and player
+Copyright (C) 2026  SoundShelf contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+================================================================
+                  GNU GENERAL PUBLIC LICENSE
+                     Version 3, 29 June 2007
+================================================================
+
+The full text of the GNU General Public License version 3 is available at:
+    https://www.gnu.org/licenses/gpl-3.0.txt
+
+For convenience, the canonical SPDX identifier for this project is:
+    SPDX-License-Identifier: GPL-3.0-or-later
+
+================================================================
+Third-party dependencies and their licenses
+================================================================
+
+This project links against:
+
+  Qt 6                 — LGPL v3 / commercial (qt.io)
+  libmpv               — LGPL v2.1+ / GPL v2+ depending on build options
+  TagLib               — LGPL v2.1 / MPL 1.1
+  SQLite               — Public domain
+  libcdio              — GPL v3+
+  libcdio-paranoia     — GPL v2+
+  libdiscid            — LGPL v2.1+
+  Chromaprint          — LGPL v2.1+ (optional)
+  libebur128           — MIT / X11 (optional)
+  FFTW3                — GPL v2+ (optional, alternatively commercial)
+
+The combined work is distributed under GPL v3 (the strongest copyleft
+applicable to the dependency set). When linking only LGPL components,
+parts may be relicensed; consult LICENSE-EXCEPTIONS.md if present.

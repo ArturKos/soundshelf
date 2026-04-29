@@ -1,0 +1,6 @@
+{
+    "name": "Bass Boost",
+    "description": "Pronounced low-end emphasis",
+    "bands_hz": [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000],
+    "gains_db": [7, 6, 4, 1, 0, 0, 0, 0, 0, 0]
+}

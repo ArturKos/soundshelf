@@ -1,0 +1,66 @@
+# Build
+build/
+build-*/
+out/
+cmake-build-*/
+
+# Qt
+*.qm
+*.user
+*.user.*
+*.autosave
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+.qmake.cache
+.qmake.stash
+
+# IDE
+.vscode/
+.idea/
+.vs/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Doxygen
+docs/html/
+docs/latex/
+docs/xml/
+docs/doxygen-warnings.log
+
+# Compiled
+*.o
+*.obj
+*.so
+*.so.*
+*.a
+*.lib
+*.dll
+*.dylib
+*.exe
+
+# Project local
+config_local.h
+secrets.enc
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Coverage
+*.gcda
+*.gcno
+*.info
+coverage/

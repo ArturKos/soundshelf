@@ -1,0 +1,129 @@
+/* SoundShelf — Amber CRT theme
+   Retro phosphor terminal feel — orange on near-black.
+   Inspired by classic IBM monochrome amber monitors. */
+
+* {
+    color: #ffb000;
+    background-color: #0a0500;
+    font-family: "VT323", "IBM Plex Mono", "Courier New", monospace;
+    font-size: 11pt;
+}
+
+QMainWindow, QDialog { background-color: #0a0500; }
+
+QMenuBar {
+    background-color: #1a0e00;
+    border-bottom: 1px solid #ff9000;
+}
+QMenuBar::item:selected {
+    background-color: #ff9000;
+    color: #0a0500;
+}
+
+QMenu {
+    background-color: #1a0e00;
+    border: 1px solid #ff9000;
+}
+QMenu::item:selected {
+    background-color: #ff9000;
+    color: #0a0500;
+}
+
+QPushButton {
+    background-color: #1a0e00;
+    border: 1px solid #ff9000;
+    border-radius: 0;
+    padding: 6px 14px;
+    color: #ffb000;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+QPushButton:hover {
+    background-color: #ff9000;
+    color: #0a0500;
+}
+QPushButton:pressed {
+    background-color: #ffb000;
+    color: #0a0500;
+}
+
+QLineEdit, QTextEdit, QSpinBox, QComboBox {
+    background-color: #0a0500;
+    border: 1px solid #ff9000;
+    border-radius: 0;
+    color: #ffb000;
+    selection-background-color: #ffb000;
+    selection-color: #0a0500;
+    padding: 4px;
+}
+
+QTreeView, QTableView, QListView {
+    background-color: #0a0500;
+    alternate-background-color: #1a0e00;
+    border: 1px solid #ff9000;
+    gridline-color: #5a3000;
+    selection-background-color: #ffb000;
+    selection-color: #0a0500;
+}
+
+QHeaderView::section {
+    background-color: #1a0e00;
+    color: #ffb000;
+    border: 1px solid #ff9000;
+    padding: 4px 8px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+QScrollBar:vertical {
+    background-color: #1a0e00;
+    width: 14px;
+    border: 1px solid #5a3000;
+}
+QScrollBar::handle:vertical {
+    background-color: #ff9000;
+    border: none;
+}
+
+QSlider::groove:horizontal {
+    background-color: #1a0e00;
+    height: 4px;
+    border: 1px solid #5a3000;
+}
+QSlider::handle:horizontal {
+    background-color: #ffb000;
+    width: 12px;
+    height: 12px;
+    margin: -4px 0;
+    border-radius: 0;
+}
+QSlider::sub-page:horizontal {
+    background-color: #ff9000;
+}
+
+QStatusBar {
+    background-color: #1a0e00;
+    border-top: 1px solid #ff9000;
+    color: #ffb000;
+}
+
+QToolTip {
+    background-color: #1a0e00;
+    color: #ffb000;
+    border: 1px solid #ff9000;
+}
+
+QWidget#PlayerBar {
+    background-color: #1a0e00;
+    border-top: 2px solid #ff9000;
+}
+
+QLabel#NowPlayingTitle {
+    color: #ffb000;
+    font-weight: bold;
+    font-size: 14pt;
+}
+QLabel#NowPlayingArtist {
+    color: #cc8800;
+    font-size: 11pt;
+}

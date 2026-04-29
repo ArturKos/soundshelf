@@ -1,0 +1,94 @@
+/* SoundShelf — Phosphor theme
+   Green-on-black, classic VT100/Apple II monochrome look. */
+
+* {
+    color: #33ff33;
+    background-color: #001100;
+    font-family: "VT323", "IBM Plex Mono", "Courier New", monospace;
+    font-size: 11pt;
+}
+
+QMainWindow, QDialog { background-color: #001100; }
+
+QMenuBar {
+    background-color: #002200;
+    border-bottom: 1px solid #33ff33;
+}
+QMenuBar::item:selected {
+    background-color: #33ff33;
+    color: #001100;
+}
+
+QMenu {
+    background-color: #002200;
+    border: 1px solid #33ff33;
+}
+QMenu::item:selected {
+    background-color: #33ff33;
+    color: #001100;
+}
+
+QPushButton {
+    background-color: #002200;
+    border: 1px solid #33ff33;
+    border-radius: 0;
+    padding: 6px 14px;
+    color: #33ff33;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+QPushButton:hover {
+    background-color: #33ff33;
+    color: #001100;
+}
+QPushButton:pressed {
+    background-color: #66ff66;
+    color: #001100;
+}
+
+QLineEdit, QTextEdit, QSpinBox, QComboBox {
+    background-color: #001100;
+    border: 1px solid #33ff33;
+    color: #33ff33;
+    selection-background-color: #33ff33;
+    selection-color: #001100;
+    padding: 4px;
+}
+
+QTreeView, QTableView, QListView {
+    background-color: #001100;
+    alternate-background-color: #002200;
+    border: 1px solid #33ff33;
+    gridline-color: #115511;
+    selection-background-color: #33ff33;
+    selection-color: #001100;
+}
+
+QHeaderView::section {
+    background-color: #002200;
+    color: #33ff33;
+    border: 1px solid #33ff33;
+    padding: 4px 8px;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+QSlider::handle:horizontal {
+    background-color: #33ff33;
+    width: 12px; height: 12px;
+    margin: -4px 0; border-radius: 0;
+}
+QSlider::sub-page:horizontal { background-color: #33ff33; }
+
+QStatusBar {
+    background-color: #002200;
+    border-top: 1px solid #33ff33;
+}
+
+QWidget#PlayerBar {
+    background-color: #002200;
+    border-top: 2px solid #33ff33;
+}
+
+QLabel#NowPlayingTitle { color: #66ff66; font-weight: bold; font-size: 14pt; }
+QLabel#NowPlayingArtist { color: #33aa33; }

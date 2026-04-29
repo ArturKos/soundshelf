@@ -1,0 +1,87 @@
+/* SoundShelf — Light theme
+   Clean, modern, light. */
+
+* {
+    color: #1a1a1a;
+    background-color: #fafafa;
+    font-family: "Inter", "Segoe UI", "Cantarell", sans-serif;
+    font-size: 10pt;
+}
+
+QMainWindow, QDialog { background-color: #fafafa; }
+
+QMenuBar {
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #d4d4d4;
+}
+QMenuBar::item:selected {
+    background-color: #007acc;
+    color: #ffffff;
+}
+
+QMenu {
+    background-color: #ffffff;
+    border: 1px solid #d4d4d4;
+}
+QMenu::item:selected {
+    background-color: #007acc;
+    color: #ffffff;
+}
+
+QPushButton {
+    background-color: #ffffff;
+    border: 1px solid #d4d4d4;
+    border-radius: 4px;
+    padding: 6px 14px;
+    color: #1a1a1a;
+}
+QPushButton:hover {
+    background-color: #f0f0f0;
+    border-color: #007acc;
+}
+QPushButton:pressed {
+    background-color: #e0e0e0;
+}
+
+QLineEdit, QTextEdit, QSpinBox, QComboBox {
+    background-color: #ffffff;
+    border: 1px solid #d4d4d4;
+    border-radius: 3px;
+    padding: 4px 6px;
+    color: #1a1a1a;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
+}
+QLineEdit:focus { border-color: #007acc; }
+
+QTreeView, QTableView, QListView {
+    background-color: #ffffff;
+    alternate-background-color: #f8f8f8;
+    border: 1px solid #d4d4d4;
+    gridline-color: #e8e8e8;
+    selection-background-color: #007acc;
+    selection-color: #ffffff;
+}
+
+QHeaderView::section {
+    background-color: #f0f0f0;
+    color: #1a1a1a;
+    border: none;
+    border-right: 1px solid #d4d4d4;
+    border-bottom: 1px solid #d4d4d4;
+    padding: 4px 8px;
+    font-weight: 600;
+}
+
+QStatusBar {
+    background-color: #f0f0f0;
+    border-top: 1px solid #d4d4d4;
+}
+
+QWidget#PlayerBar {
+    background-color: #f5f5f5;
+    border-top: 1px solid #d4d4d4;
+}
+
+QLabel#NowPlayingTitle { font-size: 14pt; font-weight: 600; color: #1a1a1a; }
+QLabel#NowPlayingArtist { font-size: 11pt; color: #555555; }

@@ -1,0 +1,6 @@
+{
+    "name": "Jazz",
+    "description": "Warm mids, smooth bass, present highs",
+    "bands_hz": [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000],
+    "gains_db": [3, 2, 1, 2, -1, -1, 0, 1, 2, 3]
+}

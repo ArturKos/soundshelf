@@ -1,0 +1,6 @@
+{
+    "name": "Classical",
+    "description": "Reduced upper-mids for less harshness, gentle bass",
+    "bands_hz": [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000],
+    "gains_db": [3, 3, 2, 1, 0, -2, -2, 0, 1, 2]
+}
