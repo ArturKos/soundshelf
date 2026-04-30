@@ -35,38 +35,68 @@ already wired up vs. still a stub.
 | core     | SettingsManager                 | done          |
 | core     | SmartPlaylistEvaluator          | done          |
 | core     | PlayerEngine (libmpv)           | scaffold      |
-| core     | LibraryManager                  | stub          |
-| core     | DiscManager                     | stub          |
-| core     | PlaylistManager                 | stub          |
-| core     | FolderWatcher                   | stub          |
-| core     | HotkeyManager                   | stub          |
-| core     | ChromaprintEngine               | stub          |
-| core     | ReplayGainAnalyzer              | stub          |
-| core     | DuplicateDetector               | stub          |
-| core     | Crossfader                      | stub          |
-| core     | Scrobbler                       | stub          |
-| core     | PluginManager                   | stub          |
-| core     | MprisAdapter                    | stub          |
+| core     | LibraryManager                  | done          |
+| core     | DiscManager                     | done          |
+| core     | PlaylistManager                 | done          |
+| core     | FolderWatcher                   | done          |
+| core     | HotkeyManager                   | done          |
+| core     | ChromaprintEngine               | done          |
+| core     | ReplayGainAnalyzer              | scaffold      |
+| core     | DuplicateDetector               | done          |
+| core     | Crossfader                      | done          |
+| core     | Scrobbler                       | done          |
+| core     | PluginManager                   | done          |
+| core     | MprisAdapter                    | done          |
 | io       | TagInfo (TagLib)                | done          |
 | io       | FolderReader                    | done          |
 | io       | CDDAReader (libcdio)            | scaffold      |
-| io       | CueParser                       | stub          |
-| io       | ImageReader                     | stub          |
-| io       | DiscRipper                      | stub          |
-| io       | FormatConverter (ffmpeg)        | stub          |
-| io       | PlaylistImporter / Exporter     | stub          |
+| io       | CueParser                       | done          |
+| io       | ImageReader                     | done          |
+| io       | DiscRipper                      | done          |
+| io       | FormatConverter (ffmpeg)        | done          |
+| io       | PlaylistImporter / Exporter     | done          |
 | data     | DatabaseManager                 | done          |
 | data     | SchemaMigrator                  | done          |
-| data     | PlayHistory                     | stub          |
-| data     | FTS5Index                       | stub          |
-| network  | RestClient                      | stub          |
-| network  | MusicBrainz / AcoustID / ...    | stub          |
-| network  | HttpServer (headless mode)      | stub          |
-| plugins  | VisualizationPlugin / Winamp    | stub          |
+| data     | PlayHistory                     | done          |
+| data     | FTS5Index                       | done          |
+| network  | RestClient                      | done          |
+| network  | MusicBrainzClient               | done          |
+| network  | AcoustIDClient                  | done          |
+| network  | CoverArtClient                  | done          |
+| network  | LyricsClient                    | done          |
+| network  | LastFmClient                    | done          |
+| network  | ListenBrainzClient              | done          |
+| network  | AccurateRipClient               | done          |
+| network  | NetworkLibrary                  | done          |
+| network  | HttpServer (headless mode)      | done          |
+| plugins  | VisualizationPlugin (abstract)  | done          |
+| plugins  | NativeVisPlugin (spectrum bars) | done          |
+| plugins  | WinampVisAdapter (vis_*.dll)    | done (shell)  |
 | ui       | MainWindow                      | scaffold      |
 | ui       | ThemeManager                    | scaffold      |
-| ui       | other widgets/dialogs           | stub          |
+| ui       | PlayerWidget                    | done          |
+| ui       | EqualizerWidget                 | done          |
+| ui       | SpectrumWidget                  | done          |
+| ui       | LibraryView                     | done          |
+| ui       | DiscView                        | done          |
+| ui       | LyricsWidget                    | done          |
+| ui       | StatsWidget                     | done          |
+| ui       | TrayIcon                        | done          |
+| ui       | BatchTagEditor                  | done          |
+| ui       | DuplicateDialog                 | done          |
+| ui       | SmartPlaylistBuilder            | done          |
+| ui       | PreferencesDialog               | done          |
+| ui       | ConverterDialog                 | done          |
+| ui       | DiscReadDialog                  | done          |
 | cli      | CLIController                   | scaffold      |
+
+`scaffold` rows are non-trivial code that boots and links but still
+depends on a backend feature that is not yet wired up — typically
+PCM-tap from PlayerEngine for the analyser-style modules and the full
+libcdio/CDDA path. `done (shell)` means the public API is complete and
+DLLs load, but the platform-specific work (Winamp `winampVisModule`
+binding, full MPRIS PropertiesChanged emission) still needs the
+respective platform headers to be vendored in.
 
 This file is updated as the stubs land their first implementations.
 
