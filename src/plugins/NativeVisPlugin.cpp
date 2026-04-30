@@ -23,7 +23,10 @@ void NativeVisPlugin::render(QPainter& painter,
                              const QVector<float>& spectrum) {
     if (spectrum.isEmpty() || area.width() <= 0 || area.height() <= 0) return;
 
-    if (m_peaks.size() != spectrum.size()) m_peaks.assign(spectrum.size(), 0.0f);
+    if (m_peaks.size() != spectrum.size()) {
+        m_peaks.resize(spectrum.size());
+        m_peaks.fill(0.0f);
+    }
 
     const int n = spectrum.size();
     const qreal barWidth = area.width() / n;

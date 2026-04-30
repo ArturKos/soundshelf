@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QUrl>
 #include <QSaveFile>
 #include <QXmlStreamWriter>
 #include <QLoggingCategory>

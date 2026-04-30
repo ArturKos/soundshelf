@@ -12,6 +12,7 @@
 
 class QNetworkAccessManager;
 class QNetworkReply;
+class QNetworkRequest;
 
 namespace soundshelf {
 
@@ -70,7 +71,7 @@ protected:
 
 private:
     void   throttle();
-    void   sendRequestWithRetry(class QNetworkRequest req,
+    void   sendRequestWithRetry(QNetworkRequest req,
                                 int attempt,
                                 QPromise<Result<QJsonDocument>>* promise);
 

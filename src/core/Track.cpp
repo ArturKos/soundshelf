@@ -1,4 +1,5 @@
 #include "soundshelf/core/Track.hpp"
+#include "soundshelf/core/Disc.hpp"
 #include <QFileInfo>
 
 namespace soundshelf {

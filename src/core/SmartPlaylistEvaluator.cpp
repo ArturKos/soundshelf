@@ -128,13 +128,13 @@ SmartPlaylistEvaluator::compile(const QJsonObject& rules) {
         if (m.isString) {
             if (op == QLatin1String("contains")) {
                 whereParts << QStringLiteral("%1 LIKE ?").arg(m.sqlExpr);
-                params << QStringLiteral("%%%1%%").arg(val.toString());
+                params << QLatin1Char('%') + val.toString() + QLatin1Char('%');
             } else if (op == QLatin1String("starts_with")) {
                 whereParts << QStringLiteral("%1 LIKE ?").arg(m.sqlExpr);
-                params << QStringLiteral("%1%%").arg(val.toString());
+                params << val.toString() + QLatin1Char('%');
             } else if (op == QLatin1String("ends_with")) {
                 whereParts << QStringLiteral("%1 LIKE ?").arg(m.sqlExpr);
-                params << QStringLiteral("%%%1").arg(val.toString());
+                params << QLatin1Char('%') + val.toString();
             } else if (op == QLatin1String("eq")) {
                 whereParts << QStringLiteral("%1 = ?").arg(m.sqlExpr);
                 params << val.toString();
@@ -184,12 +184,12 @@ SmartPlaylistEvaluator::compile(const QJsonObject& rules) {
         // Date operators
         if (m.isDate) {
             if (op == QLatin1String("in_last")) {
-                const QString s = val.toString();    // np. "180d", "7d", "1y"
+                QString s = val.toString();          // np. "180d", "7d", "1y"
                 whereParts << QStringLiteral("%1 >= datetime('now', ?)").arg(m.sqlExpr);
-                params << QStringLiteral("-%1").arg(
-                    s.replace(QStringLiteral("d"), QStringLiteral(" days"))
-                     .replace(QStringLiteral("y"), QStringLiteral(" years"))
-                     .replace(QStringLiteral("m"), QStringLiteral(" months")));
+                s.replace(QStringLiteral("d"), QStringLiteral(" days"))
+                 .replace(QStringLiteral("y"), QStringLiteral(" years"))
+                 .replace(QStringLiteral("m"), QStringLiteral(" months"));
+                params << QStringLiteral("-%1").arg(s);
             } else if (op == QLatin1String("before")) {
                 whereParts << QStringLiteral("%1 < ?").arg(m.sqlExpr);
                 params << val.toString();

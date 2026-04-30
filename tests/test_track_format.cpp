@@ -1,5 +1,6 @@
 #include <QtTest>
 #include "soundshelf/core/Track.hpp"
+#include "soundshelf/core/Disc.hpp"
 
 using namespace soundshelf;
 

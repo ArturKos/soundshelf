@@ -5,6 +5,8 @@
 #include <QDir>
 #include <QTextStream>
 #include <QXmlStreamReader>
+#include <QRegularExpression>
+#include <QHash>
 #include <QUrl>
 #include <QLoggingCategory>
 

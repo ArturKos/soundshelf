@@ -187,6 +187,11 @@ set(SS_CLI_SOURCES
     src/cli/CLIController.cpp
 )
 
+# Public headers — listed explicitly so AUTOMOC sees Q_OBJECT decls
+# even when src/<layer>/Foo.cpp lives apart from include/soundshelf/<layer>/Foo.hpp.
+file(GLOB_RECURSE SS_PUBLIC_HEADERS CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/soundshelf/*.hpp")
+
 add_library(soundshelf_lib STATIC
     ${SS_CORE_SOURCES}
     ${SS_IO_SOURCES}
@@ -195,6 +200,7 @@ add_library(soundshelf_lib STATIC
     ${SS_PLUGIN_SOURCES}
     ${SS_UI_SOURCES}
     ${SS_CLI_SOURCES}
+    ${SS_PUBLIC_HEADERS}
 )
 
 target_include_directories(soundshelf_lib

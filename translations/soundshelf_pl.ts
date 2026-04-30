@@ -15,7 +15,7 @@
         <source>Path not found: %1</source>
         <translation>Ścieżka nie istnieje: %1</translation>
     </message>
-    <message>
+    <message numerus="yes">
         <source>Imported: %1, failed: %2</source>
         <translation>
             <numerusform>Zaimportowano: %1, błędy: %2</numerusform>
