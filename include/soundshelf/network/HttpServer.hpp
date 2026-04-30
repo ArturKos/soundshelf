@@ -11,7 +11,7 @@ namespace soundshelf {
 /**
  * @brief Headless mode REST server (Qt 6.4+ `QHttpServer`).
  *
- * Exposes the routes consumed by @ref NetworkLibrary:
+ * Exposes the routes consumed by @ref NetworkLibrary :
  *  - `GET  /api/v1/tracks?q=...&limit=...`
  *  - `GET  /api/v1/tracks/<id>`
  *  - `GET  /api/v1/discs`

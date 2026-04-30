@@ -1,14 +1,7 @@
 # ARCHITECTURE.md — szczegóły techniczne
 
-## Spis treści
-1. [Model warstwowy](#model-warstwowy)
-2. [Player pipeline](#player-pipeline)
-3. [Disc reading pipeline](#disc-reading-pipeline)
-4. [Library import pipeline](#library-import-pipeline)
-5. [Plugin loading](#plugin-loading)
-6. [Network architecture](#network-architecture)
-7. [CLI ↔ GUI IPC](#cli--gui-ipc)
-8. [Threading model](#threading-model)
+<!-- Spis treści (klikany w GitHubie; doxygen pomija) -->
+[TOC]
 
 ---
 

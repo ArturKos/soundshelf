@@ -15,7 +15,7 @@ namespace soundshelf {
  * The class itself does **not** speak HTTP — it only manages the
  * `scrobble_queue` SQL table (insert on completed plays, mark as sent
  * after a network attempt) and emits signals that
- * @ref network::LastFmClient / @ref network::ListenBrainzClient pick
+ * @ref LastFmClient / @ref ListenBrainzClient pick
  * up. This split keeps offline support trivial: the queue lives in
  * SQLite, the network clients drain it whenever they're online.
  *

@@ -12,7 +12,7 @@ class ThemeManager : public QObject {
 public:
     static ThemeManager& instance();
 
-    /// Aplikuje motyw z resources/themes/<name>.qss.
+    /// Aplikuje motyw z `resources/themes/&lt;name&gt;.qss`.
     /// Emituje themeChanged.
     bool applyTheme(const QString& name);
 

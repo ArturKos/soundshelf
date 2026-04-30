@@ -13,7 +13,7 @@ namespace soundshelf {
 /**
  * @brief Client for a remote SoundShelf headless server.
  *
- * Mirrors the REST endpoints exposed by @ref HttpServer:
+ * Mirrors the REST endpoints exposed by @ref HttpServer :
  *  - `GET /api/v1/tracks?q=...&limit=...`
  *  - `GET /api/v1/tracks/<id>`
  *  - `GET /api/v1/discs`

@@ -16,7 +16,7 @@ class PlayerEngine;
  *
  * Reads the band centre frequencies and gain range from
  * @ref PlayerEngine. Each slider drives `PlayerEngine::setEqualizerBand`
- * directly. Presets are loaded from `resources/eq_presets/*.json`
+ * directly. Presets are loaded from JSON files in `resources/eq_presets/`
  * (`flat`, `rock`, `classical`, `electronic`, `bass_boost`, ...).
  */
 class EqualizerWidget : public QWidget {
