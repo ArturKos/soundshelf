@@ -23,7 +23,7 @@ QStringList ThemeManager::availableThemes() {
 }
 
 bool ThemeManager::applyTheme(const QString& name) {
-    QFile f(QStringLiteral(":/themes/%1.qss").arg(name));
+    QFile f(QStringLiteral(":/resources/themes/%1.qss").arg(name));
     if (!f.open(QIODevice::ReadOnly)) {
         qCWarning(lcTheme) << "Cannot load theme:" << name;
         return false;

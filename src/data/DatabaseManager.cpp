@@ -299,6 +299,22 @@ Result<void> DatabaseManager::updatePlayCount(int trackId) {
     return Result<void>::ok();
 }
 
+Result<QList<Track>> DatabaseManager::tracksByDisc(int discId) {
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "SELECT id FROM tracks WHERE disc_id = ? AND missing = 0 "
+        "ORDER BY disc_number ASC, track_number ASC"));
+    q.addBindValue(discId);
+    if (!q.exec()) {
+        return Result<QList<Track>>::err(Error::DatabaseError, q.lastError().text());
+    }
+    QList<Track> out;
+    while (q.next()) {
+        if (auto r = getTrack(q.value(0).toInt()); r) out << r.value();
+    }
+    return Result<QList<Track>>::ok(std::move(out));
+}
+
 Result<void> DatabaseManager::markMissing(int trackId, bool missing) {
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral("UPDATE tracks SET missing = ? WHERE id = ?"));

@@ -4,6 +4,8 @@
 
 class QMenuBar;
 class QStatusBar;
+class QLabel;
+class QTabWidget;
 
 namespace soundshelf {
 
@@ -15,7 +17,27 @@ class EqualizerWidget;
 class LyricsWidget;
 class TrayIcon;
 class PlayerEngine;
+class LibraryManager;
+class DiscManager;
+class PlaylistManager;
+struct Track;
 
+/**
+ * @brief Application shell.
+ *
+ * Owns @ref PlayerEngine, @ref LibraryManager, @ref DiscManager, and
+ * @ref PlaylistManager and wires them to the visual widgets. Layout
+ * follows `docs/mockups/`: central library table, left dock disc grid,
+ * bottom dock transport bar, right dock tab panel (spectrum / EQ /
+ * lyrics).
+ *
+ * Signal flow:
+ *  - LibraryView::trackActivated → PlayerEngine::play
+ *  - DiscView::discActivated     → load tracks via DiscManager →
+ *                                   LibraryView::setTracks
+ *  - LibraryManager::importFinished → reload library
+ *  - PlayerEngine::positionChanged  → LyricsWidget, status bar
+ */
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
@@ -27,6 +49,7 @@ protected:
     void changeEvent(QEvent* event) override;
 
 private slots:
+    void onImportFolder();
     void onAddDiscFromFolder();
     void onAddDiscFromDrive();
     void onAddDiscFromImage();
@@ -37,26 +60,41 @@ private slots:
     void onOpenBatchTagEditor();
     void onOpenDuplicateDetector();
     void onOpenStats();
+    void onOpenConverter();
     void onTogglePlayPause();
     void onTrayActivated();
+    void onTrackActivated(const Track& t);
+    void onDiscActivated(int discId);
+    void onImportProgress(int pct, const QString& currentPath);
+    void onImportFinished(int filesProcessed, int errors);
 
 private:
     void setupUi();
     void setupMenus();
     void setupStatusBar();
+    void setupTray();
     void retranslateUi();
     void connectSignals();
     void restoreState();
     void saveState();
+    void reloadLibrary();
+    void reloadDiscs();
 
-    LibraryView* m_libraryView = nullptr;
-    DiscView* m_discView = nullptr;
-    PlayerWidget* m_player = nullptr;
-    SpectrumWidget* m_spectrum = nullptr;
+    LibraryView*     m_libraryView = nullptr;
+    DiscView*        m_discView = nullptr;
+    PlayerWidget*    m_player = nullptr;
+    SpectrumWidget*  m_spectrum = nullptr;
     EqualizerWidget* m_eq = nullptr;
-    LyricsWidget* m_lyrics = nullptr;
-    TrayIcon* m_tray = nullptr;
-    PlayerEngine* m_engine = nullptr;
+    LyricsWidget*    m_lyrics = nullptr;
+    QTabWidget*      m_rightTabs = nullptr;
+    TrayIcon*        m_tray = nullptr;
+    QLabel*          m_statusLibCount = nullptr;
+    QLabel*          m_statusDbInfo = nullptr;
+
+    PlayerEngine*    m_engine = nullptr;
+    LibraryManager*  m_library = nullptr;
+    DiscManager*     m_discMgr = nullptr;
+    PlaylistManager* m_playlistMgr = nullptr;
 };
 
 } // namespace soundshelf

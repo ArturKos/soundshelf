@@ -48,6 +48,9 @@ public:
     Result<QList<Disc>> searchDiscs(const QString& query, int limit = 50);
     Result<QList<Disc>> listDiscs(DiscType filter, int limit = 1000);
 
+    /// All tracks belonging to one disc, ordered by (disc_number, track_number).
+    Result<QList<Track>> tracksByDisc(int discId);
+
     // ------- Reference data -------
 
     /// INSERT OR IGNORE dla artystów / gatunków, zwraca ID.
