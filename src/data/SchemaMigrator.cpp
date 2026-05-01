@@ -88,7 +88,15 @@ Result<void> SchemaMigrator::applyMigration(const QString& resourcePath) {
     for (const auto& line : lines) {
         const QString trimmed = line.trimmed();
 
-        // Triggery zawierają BEGIN ... END, są wieloliniowe
+        // Skip comment-only and empty lines outside of triggers — otherwise
+        // a leading comment block gets bundled with the next CREATE and
+        // the whole accumulated statement is later filtered as "starts
+        // with --", silently dropping a real statement.
+        if (!inTrigger && (trimmed.isEmpty()
+                           || trimmed.startsWith(QLatin1String("--")))) {
+            continue;
+        }
+
         if (trimmed.startsWith(QLatin1String("CREATE TRIGGER"), Qt::CaseInsensitive)) {
             inTrigger = true;
         }

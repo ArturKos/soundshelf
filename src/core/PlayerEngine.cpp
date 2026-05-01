@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QLoggingCategory>
 
+#include <clocale>
 #include <mpv/client.h>
 
 Q_LOGGING_CATEGORY(lcPlayer, "soundshelf.player")
@@ -34,6 +35,10 @@ PlayerEngine::~PlayerEngine() {
 }
 
 Result<void> PlayerEngine::initialize() {
+    // libmpv requires C numeric locale. Qt sets the system locale on
+    // QApplication construction, which causes mpv_create() to refuse.
+    std::setlocale(LC_NUMERIC, "C");
+
     auto* mpv = mpv_create();
     if (!mpv) {
         return Result<void>::err(Error::DependencyMissing,
