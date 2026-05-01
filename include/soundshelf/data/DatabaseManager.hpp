@@ -57,6 +57,11 @@ public:
     Result<int> ensureArtist(const QString& name);
     Result<int> ensureGenre(const QString& name);
 
+    /// Find-or-insert a folder-type @ref Disc identified by `(title,
+    /// artistId)`. Used by @ref LibraryManager during folder imports so
+    /// that the `album` column populates via the discs join.
+    Result<int> ensureFolderDisc(const QString& albumTitle, int artistId);
+
     // ------- Settings -------
 
     Result<QString> getSetting(const QString& key);

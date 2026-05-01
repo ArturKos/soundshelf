@@ -89,7 +89,7 @@ Result<void> LibraryManager::importFolder(const QString& folderPath) {
             auto tr = trackFromFile(f);
             if (!tr) { ++errors; continue; }
             Track tracker = tr.value();
-            // Resolve foreign keys (artist / genre).
+            // Resolve foreign keys (artist / genre / disc).
             auto& dbm = DatabaseManager::instance();
             if (!tracker.artist.isEmpty()) {
                 if (auto a = dbm.ensureArtist(tracker.artist); a) tracker.artistId = a.value();
@@ -99,6 +99,13 @@ Result<void> LibraryManager::importFolder(const QString& folderPath) {
             }
             if (!tracker.genre.isEmpty()) {
                 if (auto g = dbm.ensureGenre(tracker.genre); g) tracker.genreId = g.value();
+            }
+            if (!tracker.album.isEmpty()) {
+                const int aid = tracker.albumArtistId >= 0
+                    ? tracker.albumArtistId : tracker.artistId;
+                if (auto d = dbm.ensureFolderDisc(tracker.album, aid); d) {
+                    tracker.discId = d.value();
+                }
             }
             if (auto u = dbm.upsertTrack(tracker); !u) {
                 qCWarning(lcLib) << "upsert failed for" << f << ":" << u.error().message;

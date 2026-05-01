@@ -113,6 +113,16 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
         if (!r) return r;
         track.genreId = r.value();
     }
+    if (track.albumArtistId < 0 && !track.albumArtist.isEmpty()) {
+        auto r = ensureArtist(track.albumArtist);
+        if (!r) return r;
+        track.albumArtistId = r.value();
+    }
+    if (track.discId < 0 && !track.album.isEmpty()) {
+        const int aid = track.albumArtistId >= 0 ? track.albumArtistId : track.artistId;
+        auto r = ensureFolderDisc(track.album, aid);
+        if (r) track.discId = r.value();
+    }
 
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
@@ -297,6 +307,27 @@ Result<void> DatabaseManager::updatePlayCount(int trackId) {
         return Result<void>::err(Error::DatabaseError, q.lastError().text());
     }
     return Result<void>::ok();
+}
+
+Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle, int artistId) {
+    if (albumTitle.isEmpty()) return Result<int>::ok(-1);
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "SELECT id FROM discs WHERE title = ? AND COALESCE(artist_id, -1) = ? "
+        "AND type = 'folder' LIMIT 1"));
+    q.addBindValue(albumTitle);
+    q.addBindValue(artistId >= 0 ? artistId : -1);
+    if (q.exec() && q.next()) return Result<int>::ok(q.value(0).toInt());
+
+    q.prepare(QStringLiteral(
+        "INSERT INTO discs(title, artist_id, type) VALUES (?, ?, 'folder')"));
+    q.addBindValue(albumTitle);
+    q.addBindValue(artistId >= 0 ? QVariant(artistId) : QVariant());
+    if (!q.exec()) {
+        return Result<int>::err(Error::DatabaseError,
+            QStringLiteral("ensureFolderDisc insert: %1").arg(q.lastError().text()));
+    }
+    return Result<int>::ok(q.lastInsertId().toInt());
 }
 
 Result<QList<Track>> DatabaseManager::tracksByDisc(int discId) {
