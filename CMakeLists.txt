@@ -124,6 +124,8 @@ set(SS_CORE_SOURCES
     src/core/FolderWatcher.cpp
     src/core/HotkeyManager.cpp
     src/core/Scrobbler.cpp
+    src/core/ScrobbleDrainer.cpp
+    src/core/DiscEnricher.cpp
     src/core/ChromaprintEngine.cpp
     src/core/ReplayGainAnalyzer.cpp
     src/core/DuplicateDetector.cpp

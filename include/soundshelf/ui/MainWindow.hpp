@@ -20,6 +20,13 @@ class PlayerEngine;
 class LibraryManager;
 class DiscManager;
 class PlaylistManager;
+class Scrobbler;
+class ScrobbleDrainer;
+class LastFmClient;
+class ListenBrainzClient;
+class MusicBrainzClient;
+class CoverArtClient;
+class DiscEnricher;
 struct Track;
 
 /**
@@ -91,10 +98,17 @@ private:
     QLabel*          m_statusLibCount = nullptr;
     QLabel*          m_statusDbInfo = nullptr;
 
-    PlayerEngine*    m_engine = nullptr;
-    LibraryManager*  m_library = nullptr;
-    DiscManager*     m_discMgr = nullptr;
-    PlaylistManager* m_playlistMgr = nullptr;
+    PlayerEngine*       m_engine = nullptr;
+    LibraryManager*     m_library = nullptr;
+    DiscManager*        m_discMgr = nullptr;
+    PlaylistManager*    m_playlistMgr = nullptr;
+    Scrobbler*          m_scrobbler = nullptr;
+    LastFmClient*       m_lastfm = nullptr;
+    ListenBrainzClient* m_listenbrainz = nullptr;
+    ScrobbleDrainer*    m_drainer = nullptr;
+    MusicBrainzClient*  m_musicbrainz = nullptr;
+    CoverArtClient*     m_coverArt = nullptr;
+    DiscEnricher*       m_enricher = nullptr;
 };
 
 } // namespace soundshelf

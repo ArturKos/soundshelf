@@ -6,6 +6,13 @@
 #include "soundshelf/core/LibraryManager.hpp"
 #include "soundshelf/core/DiscManager.hpp"
 #include "soundshelf/core/PlaylistManager.hpp"
+#include "soundshelf/core/Scrobbler.hpp"
+#include "soundshelf/core/ScrobbleDrainer.hpp"
+#include "soundshelf/network/LastFmClient.hpp"
+#include "soundshelf/network/ListenBrainzClient.hpp"
+#include "soundshelf/network/MusicBrainzClient.hpp"
+#include "soundshelf/network/CoverArtClient.hpp"
+#include "soundshelf/core/DiscEnricher.hpp"
 #include "soundshelf/core/DuplicateDetector.hpp"
 #include "soundshelf/core/Disc.hpp"
 #include "soundshelf/core/Track.hpp"
@@ -52,10 +59,28 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle(tr("SoundShelf"));
     resize(1280, 800);
 
-    m_engine      = new PlayerEngine(this);
-    m_library     = new LibraryManager(this);
-    m_discMgr     = new DiscManager(this);
-    m_playlistMgr = new PlaylistManager(this);
+    m_engine       = new PlayerEngine(this);
+    m_library      = new LibraryManager(this);
+    m_discMgr      = new DiscManager(this);
+    m_playlistMgr  = new PlaylistManager(this);
+    m_scrobbler    = new Scrobbler(this);
+    m_lastfm       = new LastFmClient(this);
+    m_listenbrainz = new ListenBrainzClient(this);
+
+    // Pull credentials from SettingsManager and bring up the drainer.
+    auto& settings = SettingsManager::instance();
+    m_listenbrainz->setUserToken(settings.listenBrainzToken());
+    m_lastfm->setSessionKey(settings.lastFmSessionToken());
+    // (Last.fm api key/secret should also come from settings; for now
+    // the user has to set them via setApiCredentials elsewhere.)
+    m_scrobbler->setListenBrainzEnabled(!settings.listenBrainzToken().isEmpty());
+    m_scrobbler->setLastFmEnabled(!settings.lastFmSessionToken().isEmpty());
+    m_drainer = new ScrobbleDrainer(m_scrobbler, m_lastfm, m_listenbrainz, this);
+    m_drainer->start();
+
+    m_musicbrainz = new MusicBrainzClient(this);
+    m_coverArt    = new CoverArtClient(this);
+    m_enricher    = new DiscEnricher(m_musicbrainz, m_coverArt, this);
 
     auto initRes = m_engine->initialize();
     if (!initRes) {
@@ -226,6 +251,19 @@ void MainWindow::connectSignals() {
         connect(m_engine, &PlayerEngine::positionChanged,
                 m_lyrics, &LyricsWidget::setPositionMs);
 
+        // Scrobbler hooks — feed every Player event into the threshold
+        // tracker. The actual queue insert happens inside Scrobbler when
+        // onTrackEnded fires with completed=true (or after the
+        // 50%/4-min watermark).
+        if (m_scrobbler) {
+            connect(m_engine, &PlayerEngine::trackChanged,
+                    m_scrobbler, &Scrobbler::onTrackStarted);
+            connect(m_engine, &PlayerEngine::positionChanged,
+                    m_scrobbler, &Scrobbler::onPositionTick);
+            connect(m_engine, &PlayerEngine::trackEnded,
+                    m_scrobbler, &Scrobbler::onTrackEnded);
+        }
+
         // Auto-advance: when libmpv reports end-of-file, the track ended
         // naturally — pick the next entry from the runtime queue and play.
         connect(m_engine, &PlayerEngine::trackEnded, this,
@@ -275,8 +313,24 @@ void MainWindow::connectSignals() {
                 this, &MainWindow::onImportFinished);
     }
     if (m_discMgr) {
-        connect(m_discMgr, &DiscManager::discAdded,   this, [this](int){ reloadDiscs(); });
+        connect(m_discMgr, &DiscManager::discAdded, this, [this](int discId){
+            reloadDiscs();
+            // Physical CDs / images carry tocDiscId — try to enrich via
+            // MusicBrainz. The enricher emits enrichmentFinished even if
+            // the disc has no toc id, in which case it's a no-op.
+            if (m_enricher) m_enricher->enrichByDiscId(discId);
+        });
         connect(m_discMgr, &DiscManager::discUpdated, this, [this](int){ reloadDiscs(); });
+        if (m_enricher) {
+            connect(m_enricher, &DiscEnricher::enrichmentFinished, this,
+                    [this](int /*discId*/, bool ok, const QString& msg) {
+                if (ok && !msg.isEmpty()) {
+                    statusBar()->showMessage(
+                        tr("Disc enriched: %1").arg(msg), 5000);
+                    reloadDiscs();
+                }
+            });
+        }
     }
 }
 

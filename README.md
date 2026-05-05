@@ -45,6 +45,8 @@ already wired up vs. still a stub.
 | core     | DuplicateDetector               | done          |
 | core     | Crossfader                      | done          |
 | core     | Scrobbler                       | done          |
+| core     | ScrobbleDrainer                 | done          |
+| core     | DiscEnricher (MusicBrainz)      | done          |
 | core     | PluginManager                   | done          |
 | core     | MprisAdapter                    | done          |
 | io       | TagInfo (TagLib)                | done          |

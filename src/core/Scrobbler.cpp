@@ -69,7 +69,7 @@ Result<QList<Scrobbler::QueueRow>> Scrobbler::pendingRows(int limit) {
     auto db = DatabaseManager::instance().database();
     QSqlQuery q(db);
     q.prepare(QStringLiteral(
-        "SELECT id, track_id, service FROM scrobble_queue "
+        "SELECT id, track_id, service, queued_at FROM scrobble_queue "
         "WHERE sent = 0 AND retry_count < 5 "
         "ORDER BY queued_at ASC LIMIT ?"));
     q.addBindValue(limit);
@@ -82,6 +82,7 @@ Result<QList<Scrobbler::QueueRow>> Scrobbler::pendingRows(int limit) {
         r.id = q.value(0).toInt();
         r.trackId = q.value(1).toInt();
         r.service = q.value(2).toString();
+        r.queuedAt = q.value(3).toDateTime();
         out.append(r);
     }
     return Result<QList<QueueRow>>::ok(std::move(out));

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QDateTime>
 #include <QTimer>
 #include "soundshelf/core/Result.hpp"
 #include "soundshelf/core/Track.hpp"
@@ -57,6 +58,7 @@ public:
         int id = -1;
         int trackId = -1;
         QString service;
+        QDateTime queuedAt;   ///< when the user actually finished the track
     };
     Result<QList<QueueRow>> pendingRows(int limit = 50);
 
