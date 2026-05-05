@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux (Ubuntu)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build g++ pkg-config \
+            qt6-base-dev qt6-base-dev-tools \
+            qt6-tools-dev qt6-tools-dev-tools \
+            qt6-multimedia-dev qt6-svg-dev qt6-httpserver-dev \
+            libmpv-dev libtag1-dev libsqlite3-dev \
+            libcdio-dev libcdio-paranoia-dev libdiscid-dev \
+            libchromaprint-dev libebur128-dev libfftw3-dev \
+            ffmpeg
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSOUNDSHELF_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: soundshelf-linux-x86_64
+          path: |
+            build/soundshelf
+            build/soundshelf-cli
+          retention-days: 14
+
+  windows:
+    name: Windows (MSYS2 MinGW64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        # Run every step inside the MINGW64 MSYS2 environment so that
+        # /mingw64/bin tools (cmake, gcc, qmake6, pkgconf) are on PATH.
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            git
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-qt6-base
+            mingw-w64-x86_64-qt6-tools
+            mingw-w64-x86_64-qt6-multimedia
+            mingw-w64-x86_64-qt6-svg
+            mingw-w64-x86_64-qt6-httpserver
+            mingw-w64-x86_64-mpv
+            mingw-w64-x86_64-taglib
+            mingw-w64-x86_64-sqlite3
+            mingw-w64-x86_64-libcdio-paranoia
+            mingw-w64-x86_64-libdiscid
+            mingw-w64-x86_64-chromaprint
+            mingw-w64-x86_64-libebur128
+            mingw-w64-x86_64-fftw
+
+      - name: Patch upstream .pc files
+        run: |
+          # Three MSYS2 packages ship with literal '-I/mingw64/include'
+          # (instead of '-I${includedir}') in their .pc files, which
+          # confuses native-Windows CMake. Same fix as scripts/install-
+          # deps-windows.sh applies in CI.
+          for f in /mingw64/lib/pkgconfig/isl.pc \
+                   /mingw64/lib/pkgconfig/mujs.pc \
+                   /mingw64/lib/pkgconfig/tre.pc; do
+              if [ -f "$f" ]; then
+                  sed -i 's|-I/mingw64/include\b|-I${includedir}|g' "$f"
+              fi
+          done
+
+      - name: Configure
+        run: |
+          cmake -G Ninja -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSOUNDSHELF_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: soundshelf-windows-x86_64
+          path: |
+            build/soundshelf.exe
+            build/soundshelf-cli.exe
+          retention-days: 14
