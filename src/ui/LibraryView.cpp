@@ -48,8 +48,22 @@ LibraryView::LibraryView(QWidget* parent) : QWidget(parent) {
     m_view->horizontalHeader()->setStretchLastSection(true);
     root->addWidget(m_view, 1);
 
+    // Two parallel filtering paths — both run for every keystroke,
+    // and that's intentional. The proxy filter narrows the *currently
+    // visible* tracks instantly (great UX), while the debounced
+    // signal asks the shell to fetch a wider FTS5-backed result set
+    // for libraries that don't fit in the proxy's source model.
     connect(m_search, &QLineEdit::textChanged,
             m_proxy, &QSortFilterProxyModel::setFilterFixedString);
+
+    m_searchDebounce.setSingleShot(true);
+    m_searchDebounce.setInterval(250);
+    connect(m_search, &QLineEdit::textChanged, this,
+            [this]() { m_searchDebounce.start(); });
+    connect(&m_searchDebounce, &QTimer::timeout, this, [this]() {
+        emit searchRequested(m_search->text().trimmed());
+    });
+
     connect(m_view, &QTableView::doubleClicked,
             this, [this](const QModelIndex& proxyIdx) {
         const auto src = m_proxy->mapToSource(proxyIdx);

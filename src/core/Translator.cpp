@@ -65,10 +65,15 @@ bool Translator::loadLocale(const QString& localeCode) {
         app->installTranslator(&m_qtTranslator);
     }
 
-    // Nasze tłumaczenie z resources lub z dysku
-    bool ok = m_appTranslator.load(QStringLiteral(":/translations/soundshelf_%1.qm").arg(code));
+    // Our translation — first from resources (registered by
+    // qt_add_resources with BASE=binary dir, so the .qm sits at the
+    // root of the resource fs as `soundshelf_<code>.qm`), then from
+    // a translations/ folder next to the binary.
+    bool ok = m_appTranslator.load(QStringLiteral(":/soundshelf_%1.qm").arg(code));
     if (!ok) {
-        // Fallback — szukaj w katalogu obok binarki
+        ok = m_appTranslator.load(QStringLiteral(":/translations/soundshelf_%1.qm").arg(code));
+    }
+    if (!ok) {
         ok = m_appTranslator.load(QStringLiteral("translations/soundshelf_%1.qm").arg(code));
     }
 

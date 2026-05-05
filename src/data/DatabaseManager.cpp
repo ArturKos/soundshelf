@@ -120,7 +120,7 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
     }
     if (track.discId < 0 && !track.album.isEmpty()) {
         const int aid = track.albumArtistId >= 0 ? track.albumArtistId : track.artistId;
-        auto r = ensureFolderDisc(track.album, aid);
+        auto r = ensureFolderDisc(track.album, aid, track.coverData);
         if (r) track.discId = r.value();
     }
 
@@ -309,20 +309,36 @@ Result<void> DatabaseManager::updatePlayCount(int trackId) {
     return Result<void>::ok();
 }
 
-Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle, int artistId) {
+Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle,
+                                              int artistId,
+                                              const QByteArray& coverData) {
     if (albumTitle.isEmpty()) return Result<int>::ok(-1);
     QSqlQuery q(m_db);
     q.prepare(QStringLiteral(
-        "SELECT id FROM discs WHERE title = ? AND COALESCE(artist_id, -1) = ? "
-        "AND type = 'folder' LIMIT 1"));
+        "SELECT id, cover_data FROM discs WHERE title = ? "
+        "AND COALESCE(artist_id, -1) = ? AND type = 'folder' LIMIT 1"));
     q.addBindValue(albumTitle);
     q.addBindValue(artistId >= 0 ? artistId : -1);
-    if (q.exec() && q.next()) return Result<int>::ok(q.value(0).toInt());
+    if (q.exec() && q.next()) {
+        const int existingId = q.value(0).toInt();
+        const QByteArray existingCover = q.value(1).toByteArray();
+        // Lazy fill: first track that brings a cover wins.
+        if (existingCover.isEmpty() && !coverData.isEmpty()) {
+            QSqlQuery up(m_db);
+            up.prepare(QStringLiteral("UPDATE discs SET cover_data = ? WHERE id = ?"));
+            up.addBindValue(coverData);
+            up.addBindValue(existingId);
+            up.exec();
+        }
+        return Result<int>::ok(existingId);
+    }
 
     q.prepare(QStringLiteral(
-        "INSERT INTO discs(title, artist_id, type) VALUES (?, ?, 'folder')"));
+        "INSERT INTO discs(title, artist_id, type, cover_data) "
+        "VALUES (?, ?, 'folder', ?)"));
     q.addBindValue(albumTitle);
     q.addBindValue(artistId >= 0 ? QVariant(artistId) : QVariant());
+    q.addBindValue(coverData.isEmpty() ? QVariant() : QVariant(coverData));
     if (!q.exec()) {
         return Result<int>::err(Error::DatabaseError,
             QStringLiteral("ensureFolderDisc insert: %1").arg(q.lastError().text()));

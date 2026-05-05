@@ -8,6 +8,7 @@
 #include <taglib/audioproperties.h>
 #include <taglib/tpropertymap.h>
 #include <taglib/mpegfile.h>
+#include <taglib/id3v1tag.h>
 #include <taglib/id3v2tag.h>
 #include <taglib/id3v2frame.h>
 #include <taglib/attachedpictureframe.h>
@@ -21,15 +22,128 @@
 #include <taglib/mp4tag.h>
 #include <taglib/mp4coverart.h>
 
+#include <QStringDecoder>
+
 Q_LOGGING_CATEGORY(lcTag, "soundshelf.tag")
 
 namespace soundshelf {
 
 namespace {
 
+/// Detects CP1250 bytes mistakenly tagged as Latin-1 in ID3v2 frames.
+/// Lots of older Polish taggers wrote raw CP1250 bytes into a frame
+/// that declared encoding=0 (Latin-1). TagLib faithfully decodes
+/// Latin-1 → Unicode, so we end up with chars like £ ¿ ¶ instead of
+/// Ł ż ¶. These chars are extremely uncommon in real audio metadata —
+/// when we see them, retry the decode as CP1250.
+bool looksLikeCp1250MisreadAsLatin1(const QString& s) {
+    // Polish-CP1250 bytes that, when read as Latin-1, become these
+    // unusual Unicode codepoints. Cheap O(n) scan with a constant
+    // codepoint set.
+    for (QChar c : s) {
+        const ushort u = c.unicode();
+        if (u == 0x00A3   // £  (CP1250 Ł)
+         || u == 0x00A5   // ¥  (CP1250 Ą)
+         || u == 0x00A6   // ¦  (CP1250 Ś)
+         || u == 0x00A8   // ¨  (CP1250 ¨ / dier.)
+         || u == 0x00AC   // ¬  (CP1250 Ź)
+         || u == 0x00AF   // ¯  (CP1250 Ż)
+         || u == 0x00B3   // ³  (CP1250 ł)
+         || u == 0x00B5   // µ  (CP1250 µ)
+         || u == 0x00B6   // ¶  (CP1250 ś)
+         || u == 0x00B9   // ¹  (CP1250 ą)
+         || u == 0x00BC   // ¼  (CP1250 ź)
+         || u == 0x00BF   // ¿  (CP1250 ż)
+         || u == 0x00C6   // Æ  (CP1250 Ć)
+         || u == 0x00CA   // Ê  (CP1250 Ę)
+         || u == 0x00D3   // Ó  (CP1250 Ó — same!)
+         || u == 0x00DF   // ß
+         || u == 0x00E6   // æ  (CP1250 ć)
+         || u == 0x00EA   // ê  (CP1250 ę)
+         || u == 0x00F3   // ó
+            ) return true;
+    }
+    return false;
+}
+
+/// Fixes one Latin-1-pretending-to-be-CP1250 codepoint. Returns the
+/// original char if it isn't one of the Polish CP1250 collisions.
+QChar fixupCp1250Char(QChar c) {
+    switch (c.unicode()) {
+        case 0x00A3: return QChar(0x0141);  // £ → Ł
+        case 0x00A5: return QChar(0x0104);  // ¥ → Ą
+        case 0x00A6: return QChar(0x015A);  // ¦ → Ś
+        case 0x00AC: return QChar(0x0179);  // ¬ → Ź
+        case 0x00AF: return QChar(0x017B);  // ¯ → Ż
+        case 0x00B3: return QChar(0x0142);  // ³ → ł
+        case 0x00B6: return QChar(0x015B);  // ¶ → ś
+        case 0x00B9: return QChar(0x0105);  // ¹ → ą
+        case 0x00BC: return QChar(0x017A);  // ¼ → ź
+        case 0x00BF: return QChar(0x017C);  // ¿ → ż
+        case 0x00C6: return QChar(0x0106);  // Æ → Ć
+        case 0x00CA: return QChar(0x0118);  // Ê → Ę
+        case 0x00D1: return QChar(0x0143);  // Ñ → Ń
+        case 0x00E6: return QChar(0x0107);  // æ → ć
+        case 0x00EA: return QChar(0x0119);  // ê → ę
+        case 0x00F1: return QChar(0x0144);  // ñ → ń
+        // ó/Ó share the same code point in CP1250 and Latin-1 (0xF3/0xD3),
+        // so no remap is needed.
+        default: return c;
+    }
+}
+
 QString tlString(const TagLib::String& s) {
     if (s.isEmpty()) return {};
-    return QString::fromStdString(s.to8Bit(true));
+    QString out = QString::fromStdString(s.to8Bit(true));
+    if (looksLikeCp1250MisreadAsLatin1(out)) {
+        for (int i = 0; i < out.size(); ++i) out[i] = fixupCp1250Char(out[i]);
+    }
+    return out;
+}
+
+/// ID3v1 has no encoding marker — the spec says Latin-1 but real-world
+/// Polish files use Windows-1250. TagLib's default StringHandler reads
+/// raw bytes as Latin-1; we override with a decoder that tries UTF-8
+/// first (some taggers do this) and falls back to CP1250.
+class Cp1250StringHandler : public TagLib::ID3v1::StringHandler {
+public:
+    TagLib::String parse(const TagLib::ByteVector& data) const override {
+        QByteArray ba(data.data(), int(data.size()));
+        // Strip trailing NULs and spaces (ID3v1 fields are space/NUL padded).
+        while (!ba.isEmpty() && (ba.back() == '\0' || ba.back() == ' ')) ba.chop(1);
+        if (ba.isEmpty()) return TagLib::String();
+
+        // UTF-8 first — only succeeds if every byte is valid UTF-8.
+        QStringDecoder utf8(QStringDecoder::Utf8,
+                            QStringDecoder::Flag::ConvertInvalidToNull);
+        const QString u = utf8.decode(ba);
+        if (!utf8.hasError()) {
+            return TagLib::String(u.toStdString(), TagLib::String::UTF8);
+        }
+        // Fallback: read as Latin-1 then remap the Polish-specific
+        // codepoints. Qt 6 doesn't ship CP1250 in QStringConverter, so
+        // we go through the same fixup table tlString() uses.
+        QString s = QString::fromLatin1(ba);
+        for (int i = 0; i < s.size(); ++i) s[i] = fixupCp1250Char(s[i]);
+        return TagLib::String(s.toStdString(), TagLib::String::UTF8);
+    }
+
+    TagLib::ByteVector render(const TagLib::String& s) const override {
+        // ID3v1 has no Polish-aware encoder in stdlib; persist as
+        // Latin-1 (lossy) and let modern taggers prefer ID3v2.
+        const QString q = QString::fromStdString(s.to8Bit(true));
+        const QByteArray ba = q.toLatin1();
+        return TagLib::ByteVector(ba.constData(), uint(ba.size()));
+    }
+};
+
+void installCp1250Handler() {
+    static Cp1250StringHandler handler;
+    static bool installed = false;
+    if (!installed) {
+        TagLib::ID3v1::Tag::setStringHandler(&handler);
+        installed = true;
+    }
 }
 
 TagLib::String fromQ(const QString& s) {
@@ -126,6 +240,7 @@ Result<TagInfo> TagInfo::fromFile(const QString& path) {
         return Result<TagInfo>::err(Error::FileNotFound,
             QStringLiteral("File not found: %1").arg(path));
     }
+    installCp1250Handler();
 
     TagLib::FileRef ref(path.toUtf8().constData());
     if (ref.isNull() || !ref.tag()) {
@@ -267,6 +382,7 @@ void TagInfo::applyToTrack(Track& track) const {
     track.artist = artist;
     track.albumArtist = albumArtist.isEmpty() ? artist : albumArtist;
     track.album = album;
+    track.coverData = coverData;
     track.genre = genre;
     track.year = year;
     track.trackNumber = trackNumber;

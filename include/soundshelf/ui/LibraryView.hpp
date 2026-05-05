@@ -2,6 +2,7 @@
 
 #include <QWidget>
 #include <QList>
+#include <QTimer>
 #include "soundshelf/core/Track.hpp"
 
 class QTableView;
@@ -32,14 +33,25 @@ public:
     /// Currently selected track ids.
     QList<int> selectedTrackIds() const;
 
+    /// All tracks currently shown (in the order they were last set).
+    /// Used by the host to push a queue into PlaylistManager.
+    const QList<Track>& tracks() const { return m_tracks; }
+
 signals:
     void trackActivated(const Track& t);
+
+    /// Emitted (debounced 250 ms) when the search box changes.
+    /// The shell is expected to run an FTS5-backed query and call
+    /// @ref setTracks with the results — empty query means "show
+    /// everything" (the shell typically calls listTracks).
+    void searchRequested(const QString& query);
 
 private:
     QTableView*            m_view = nullptr;
     QStandardItemModel*    m_model = nullptr;
     QSortFilterProxyModel* m_proxy = nullptr;
     QLineEdit*             m_search = nullptr;
+    QTimer                 m_searchDebounce;
     QList<Track>           m_tracks;
 };
 

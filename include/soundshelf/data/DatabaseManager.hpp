@@ -60,7 +60,12 @@ public:
     /// Find-or-insert a folder-type @ref Disc identified by `(title,
     /// artistId)`. Used by @ref LibraryManager during folder imports so
     /// that the `album` column populates via the discs join.
-    Result<int> ensureFolderDisc(const QString& albumTitle, int artistId);
+    /// @p coverData is only written on the initial insert — subsequent
+    /// calls with non-empty data fill cover_data only when the row had
+    /// none, so the first track of an album wins.
+    Result<int> ensureFolderDisc(const QString& albumTitle,
+                                 int artistId,
+                                 const QByteArray& coverData = {});
 
     // ------- Settings -------
 

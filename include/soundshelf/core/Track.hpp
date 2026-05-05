@@ -67,6 +67,10 @@ struct Track {
     // Cover art (cached thumbnail hash, full image stored separately)
     QByteArray coverHash;
 
+    // Transient — set by TagInfo::applyToTrack, never read back from DB.
+    // Used by upsertTrack to seed the album's cover_data on first insert.
+    QByteArray coverData;
+
     // Stats
     int playCount = 0;
     int skipCount = 0;

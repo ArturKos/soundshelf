@@ -10,6 +10,7 @@
 #include "soundshelf/core/Disc.hpp"
 #include "soundshelf/core/Track.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
+#include "soundshelf/data/FTS5Index.hpp"
 #include "soundshelf/ui/LibraryView.hpp"
 #include "soundshelf/ui/DiscView.hpp"
 #include "soundshelf/ui/PlayerWidget.hpp"
@@ -224,10 +225,34 @@ void MainWindow::connectSignals() {
         });
         connect(m_engine, &PlayerEngine::positionChanged,
                 m_lyrics, &LyricsWidget::setPositionMs);
+
+        // Auto-advance: when libmpv reports end-of-file, the track ended
+        // naturally — pick the next entry from the runtime queue and play.
+        connect(m_engine, &PlayerEngine::trackEnded, this,
+                [this](const Track&, int /*playedMs*/, bool /*completed*/) {
+            if (!m_playlistMgr->advanceQueue()) return;
+            const auto& q = m_playlistMgr->queue();
+            const int i = m_playlistMgr->queueIndex();
+            if (i >= 0 && i < q.size()) onTrackActivated(q[i]);
+        });
     }
     if (m_libraryView) {
         connect(m_libraryView, &LibraryView::trackActivated,
                 this, &MainWindow::onTrackActivated);
+        connect(m_libraryView, &LibraryView::searchRequested, this,
+                [this](const QString& q) {
+            if (q.isEmpty()) { reloadLibrary(); return; }
+            FTS5Index fts;
+            auto idsR = fts.searchTrackIds(q, 500);
+            if (!idsR) return;
+            QList<Track> rows;
+            auto& dbm = DatabaseManager::instance();
+            for (int id : idsR.value()) {
+                if (auto t = dbm.getTrack(id); t) rows.append(t.value());
+            }
+            m_libraryView->setTracks(rows);
+            m_statusLibCount->setText(tr("%1 matches").arg(rows.size()));
+        });
     }
     if (m_discView) {
         connect(m_discView, &DiscView::discActivated,
@@ -298,6 +323,21 @@ void MainWindow::reloadDiscs() {
 
 void MainWindow::onTrackActivated(const Track& t) {
     if (!m_engine) return;
+
+    // Push the visible library list as the playback queue, anchored at
+    // the activated track. This way auto-advance has a list to walk.
+    if (m_libraryView) {
+        const auto& visible = m_libraryView->tracks();
+        int startIdx = -1;
+        for (int i = 0; i < visible.size(); ++i) {
+            if (visible[i].id == t.id) { startIdx = i; break; }
+        }
+        if (startIdx >= 0 && (m_playlistMgr->queue().isEmpty()
+            || m_playlistMgr->queue()[m_playlistMgr->queueIndex()].id != t.id)) {
+            m_playlistMgr->setQueue(visible, startIdx);
+        }
+    }
+
     auto r = m_engine->play(t);
     if (!r) {
         statusBar()->showMessage(tr("Cannot play: %1").arg(r.error().message), 5000);
