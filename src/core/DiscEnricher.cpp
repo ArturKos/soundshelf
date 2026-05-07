@@ -58,6 +58,34 @@ void DiscEnricher::enrichByTocId(int localDiscId, const QString& tocDiscId) {
     watcher->setFuture(fut);
 }
 
+void DiscEnricher::enrichByMetadata(int localDiscId,
+                                    const QString& artist,
+                                    const QString& album) {
+    if (!m_mb) {
+        emit enrichmentFinished(localDiscId, false,
+            QStringLiteral("No MusicBrainz client"));
+        return;
+    }
+    if (artist.isEmpty() || album.isEmpty()) {
+        emit enrichmentFinished(localDiscId, false,
+            QStringLiteral("Need both artist and album to search"));
+        return;
+    }
+    qCInfo(lcEnrich) << "Searching MB for" << artist << "/" << album
+                     << "(local disc" << localDiscId << ")";
+
+    auto fut = m_mb->searchRelease(artist, album, 5);
+    auto* watcher = new QFutureWatcher<Result<QJsonDocument>>(this);
+    connect(watcher, &QFutureWatcher<Result<QJsonDocument>>::finished,
+            this, [this, watcher, localDiscId]() {
+        // searchRelease returns a top-level "releases" array — same
+        // shape as lookupDiscId, so onLookupResult handles both.
+        onLookupResult(localDiscId, watcher->result());
+        watcher->deleteLater();
+    });
+    watcher->setFuture(fut);
+}
+
 void DiscEnricher::onLookupResult(int localDiscId,
                                   const Result<QJsonDocument>& res) {
     if (!res) {

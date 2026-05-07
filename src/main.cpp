@@ -8,9 +8,14 @@
 #include <QStandardPaths>
 
 #include "soundshelf/core/Translator.hpp"
+#include "soundshelf/core/SettingsManager.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
+#include "soundshelf/network/HttpServer.hpp"
 #include "soundshelf/ui/MainWindow.hpp"
 #include "soundshelf/ui/ThemeManager.hpp"
+
+#include <QHostAddress>
+#include <QUuid>
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
@@ -62,9 +67,36 @@ int main(int argc, char* argv[]) {
 
     // ----- Headless mode? -----
     if (parser.isSet(serveOpt)) {
-        // TODO: uruchom HttpServer i nie pokazuj GUI
-        qInfo() << "Headless mode not yet wired in. TODO: connect to network::HttpServer";
-        return 0;
+#ifdef SOUNDSHELF_HAVE_HTTPSERVER
+        // Bearer token: persist across restarts, generate one on first
+        // serve. Stored via SettingsManager so the user can also paste
+        // it into Preferences → Network for clients.
+        auto& settings = soundshelf::SettingsManager::instance();
+        auto& dbm = soundshelf::DatabaseManager::instance();
+        auto tokR = dbm.getSetting(QStringLiteral("server.bearer_token"));
+        QString token = tokR.isOk() ? tokR.value() : QString();
+        if (token.isEmpty()) {
+            token = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            dbm.setSetting(QStringLiteral("server.bearer_token"), token);
+        }
+        Q_UNUSED(settings);
+
+        soundshelf::HttpServer server;
+        server.setBearerToken(token);
+        const quint16 port = parser.value(portOpt).toUShort();
+        auto r = server.start(QHostAddress::Any, port ? port : 8080);
+        if (!r) {
+            qCritical() << "Cannot start HTTP server:" << r.error().message;
+            return 3;
+        }
+        qInfo().noquote() << QStringLiteral("SoundShelf serving on port %1")
+                                 .arg(port ? port : 8080);
+        qInfo().noquote() << QStringLiteral("Bearer token: %1").arg(token);
+        return app.exec();
+#else
+        qCritical() << "Built without QHttpServer — --serve not available.";
+        return 4;
+#endif
     }
 
     // ----- Theme -----

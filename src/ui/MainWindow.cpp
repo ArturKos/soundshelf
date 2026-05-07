@@ -12,6 +12,7 @@
 #include "soundshelf/network/ListenBrainzClient.hpp"
 #include "soundshelf/network/MusicBrainzClient.hpp"
 #include "soundshelf/network/CoverArtClient.hpp"
+#include "soundshelf/network/LyricsClient.hpp"
 #include "soundshelf/core/DiscEnricher.hpp"
 #include "soundshelf/core/DuplicateDetector.hpp"
 #include "soundshelf/core/Disc.hpp"
@@ -36,6 +37,8 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QFutureWatcher>
+#include <QJsonDocument>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -78,9 +81,10 @@ MainWindow::MainWindow(QWidget* parent)
     m_drainer = new ScrobbleDrainer(m_scrobbler, m_lastfm, m_listenbrainz, this);
     m_drainer->start();
 
-    m_musicbrainz = new MusicBrainzClient(this);
-    m_coverArt    = new CoverArtClient(this);
-    m_enricher    = new DiscEnricher(m_musicbrainz, m_coverArt, this);
+    m_musicbrainz  = new MusicBrainzClient(this);
+    m_coverArt     = new CoverArtClient(this);
+    m_lyricsClient = new LyricsClient(this);
+    m_enricher     = new DiscEnricher(m_musicbrainz, m_coverArt, this);
 
     auto initRes = m_engine->initialize();
     if (!initRes) {
@@ -264,6 +268,42 @@ void MainWindow::connectSignals() {
                     m_scrobbler, &Scrobbler::onTrackEnded);
         }
 
+        // Lyrics: on track change, pull from cache; on miss go to
+        // LRCLib and stash the response back into the lyrics table.
+        connect(m_engine, &PlayerEngine::trackChanged, this,
+                [this](const Track& t) {
+            if (!m_lyrics || t.id < 0) return;
+            auto& dbm = DatabaseManager::instance();
+            if (auto cached = dbm.getLyrics(t.id); cached) {
+                m_lyrics->setLyrics(cached.value().plain, cached.value().synced);
+                return;
+            }
+            // Cache miss — try LRCLib if we have what it needs.
+            if (!m_lyricsClient || t.title.isEmpty() || t.artist.isEmpty()) {
+                m_lyrics->setLyrics(QString(), QString());
+                return;
+            }
+            const int trackId = t.id;
+            const QString album = t.album;
+            auto fut = m_lyricsClient->getLyrics(t.artist, t.title, album,
+                                                  qMax(0, t.durationMs / 1000));
+            auto* w = new QFutureWatcher<Result<QJsonDocument>>(this);
+            connect(w, &QFutureWatcher<Result<QJsonDocument>>::finished, this,
+                    [this, w, trackId]() {
+                const auto r = w->result();
+                w->deleteLater();
+                if (!r) return;
+                const auto decoded = LyricsClient::decode(r.value());
+                m_lyrics->setLyrics(decoded.plain, decoded.synced);
+                DatabaseManager::LyricsRow row;
+                row.plain  = decoded.plain;
+                row.synced = decoded.synced;
+                row.source = decoded.source;
+                DatabaseManager::instance().setLyrics(trackId, row);
+            });
+            w->setFuture(fut);
+        });
+
         // Auto-advance: when libmpv reports end-of-file, the track ended
         // naturally — pick the next entry from the runtime queue and play.
         connect(m_engine, &PlayerEngine::trackEnded, this,
@@ -315,10 +355,18 @@ void MainWindow::connectSignals() {
     if (m_discMgr) {
         connect(m_discMgr, &DiscManager::discAdded, this, [this](int discId){
             reloadDiscs();
-            // Physical CDs / images carry tocDiscId — try to enrich via
-            // MusicBrainz. The enricher emits enrichmentFinished even if
-            // the disc has no toc id, in which case it's a no-op.
-            if (m_enricher) m_enricher->enrichByDiscId(discId);
+            if (!m_enricher) return;
+            // Two enrichment paths: physical/CUE discs carry tocDiscId
+            // and resolve via MB's /discid endpoint; folder imports
+            // fall back to a free-text search by (artist, album).
+            auto d = DatabaseManager::instance().getDisc(discId);
+            if (!d) return;
+            const Disc& disc = d.value();
+            if (!disc.tocDiscId.isEmpty()) {
+                m_enricher->enrichByDiscId(discId);
+            } else if (!disc.artist.isEmpty() && !disc.title.isEmpty()) {
+                m_enricher->enrichByMetadata(discId, disc.artist, disc.title);
+            }
         });
         connect(m_discMgr, &DiscManager::discUpdated, this, [this](int){ reloadDiscs(); });
         if (m_enricher) {

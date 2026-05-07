@@ -509,4 +509,38 @@ Result<void> DatabaseManager::setSetting(const QString& key, const QString& valu
     return Result<void>::ok();
 }
 
+Result<DatabaseManager::LyricsRow> DatabaseManager::getLyrics(int trackId) {
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "SELECT text, synced_lrc, source FROM lyrics WHERE track_id = ?"));
+    q.addBindValue(trackId);
+    if (!q.exec() || !q.next()) {
+        return Result<LyricsRow>::err(Error::FileNotFound,
+            QStringLiteral("No cached lyrics for track %1").arg(trackId));
+    }
+    LyricsRow row;
+    row.plain  = q.value(0).toString();
+    row.synced = q.value(1).toString();
+    row.source = q.value(2).toString();
+    return Result<LyricsRow>::ok(std::move(row));
+}
+
+Result<void> DatabaseManager::setLyrics(int trackId, const LyricsRow& row) {
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral(
+        "INSERT INTO lyrics(track_id, text, synced_lrc, source) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(track_id) DO UPDATE SET "
+        "text = excluded.text, synced_lrc = excluded.synced_lrc, "
+        "source = excluded.source, fetched_at = CURRENT_TIMESTAMP"));
+    q.addBindValue(trackId);
+    q.addBindValue(row.plain);
+    q.addBindValue(row.synced);
+    q.addBindValue(row.source);
+    if (!q.exec()) {
+        return Result<void>::err(Error::DatabaseError, q.lastError().text());
+    }
+    return Result<void>::ok();
+}
+
 } // namespace soundshelf

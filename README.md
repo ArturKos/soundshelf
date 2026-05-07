@@ -70,7 +70,7 @@ already wired up vs. still a stub.
 | network  | ListenBrainzClient              | done          |
 | network  | AccurateRipClient               | done          |
 | network  | NetworkLibrary                  | done          |
-| network  | HttpServer (headless mode)      | done          |
+| network  | HttpServer (headless mode)      | done (verified) |
 | plugins  | VisualizationPlugin (abstract)  | done          |
 | plugins  | NativeVisPlugin (spectrum bars) | done          |
 | plugins  | WinampVisAdapter (vis_*.dll)    | done (shell)  |

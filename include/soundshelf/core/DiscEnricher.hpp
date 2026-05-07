@@ -45,6 +45,12 @@ public:
     /// the caller already has it in hand and just wants metadata.
     void enrichByTocId(int localDiscId, const QString& tocDiscId);
 
+    /// Fallback for folder/CUE imports that have no `tocDiscId`: uses
+    /// MusicBrainz' free-text release search, picks the top match by
+    /// score, and runs the same update + cover-fetch pipeline.
+    void enrichByMetadata(int localDiscId, const QString& artist,
+                          const QString& album);
+
     /// Skip cover-art lookup (useful in tests / for users behind
     /// metered connections).
     void setFetchCoverArt(bool on) { m_fetchCover = on; }

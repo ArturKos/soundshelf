@@ -72,6 +72,23 @@ public:
     Result<QString> getSetting(const QString& key);
     Result<void>    setSetting(const QString& key, const QString& value);
 
+    // ------- Lyrics cache -------
+
+    /// Cached lyrics for one track. Either field may be empty when the
+    /// upstream service only has one of the two formats.
+    struct LyricsRow {
+        QString plain;
+        QString synced;
+        QString source;
+    };
+
+    /// Returns the cached lyrics for @p trackId or an error when the
+    /// row doesn't exist yet (caller's signal to fetch from LRCLib).
+    Result<LyricsRow> getLyrics(int trackId);
+
+    /// INSERT OR REPLACE on the lyrics row.
+    Result<void> setLyrics(int trackId, const LyricsRow& row);
+
 signals:
     void trackInserted(int id);
     void trackUpdated(int id);
