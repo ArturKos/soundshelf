@@ -63,7 +63,6 @@ windeployqt6 \
     --release \
     --no-translations \
     --no-system-d3d-compiler \
-    --no-virtualkeyboard \
     --no-quick-import \
     --no-opengl-sw \
     "$OUT/soundshelf.exe"
@@ -74,37 +73,38 @@ green "==> Resolving non-Qt dependencies"
 
 # `ldd` on Windows MSYS2 prints lines like
 #   libmpv-2.dll => /mingw64/bin/libmpv-2.dll (0x...)
-# We pick everything under /mingw64/.
+# We pick everything under /mingw64/. Uses a single global SEEN map
+# (not a nameref local — bash 5.x trips over its own recursion when a
+# nameref gets the same name as a parameter inside a recursive call).
+declare -A SEEN
+
 walk_deps() {
     local exe="$1"
-    local seen_var="$2"
-    local -n seen="$seen_var"
-    local out
+    local out base
     out=$(ldd "$exe" 2>/dev/null | awk '/=> \/mingw64\// {print $3}') || return 0
     for dll in $out; do
-        local base
         base=$(basename "$dll")
-        if [ -z "${seen[$base]:-}" ]; then
-            seen[$base]=1
+        if [ -z "${SEEN[$base]+x}" ]; then
+            SEEN[$base]=1
             cp -n "$dll" "$OUT/" 2>/dev/null || true
-            walk_deps "$dll" seen
+            walk_deps "$dll"
         fi
     done
 }
 
-declare -A SEEN
-walk_deps "$OUT/soundshelf.exe"     SEEN
-walk_deps "$OUT/soundshelf-cli.exe" SEEN
+walk_deps "$OUT/soundshelf.exe"
+walk_deps "$OUT/soundshelf-cli.exe"
 
 # windeployqt's plugins also drag in extra DLLs (e.g. sqldrivers/qsqlite
 # needs sqlite3.dll). Re-walk the freshly-copied DLLs.
 for dll in "$OUT"/*.dll; do
-    walk_deps "$dll" SEEN
+    walk_deps "$dll"
 done
-for sub in platforms iconengines imageformats sqldrivers styles tls; do
+for sub in platforms iconengines imageformats sqldrivers styles tls \
+           networkinformation; do
     [ -d "$OUT/$sub" ] || continue
     for dll in "$OUT/$sub"/*.dll; do
-        [ -f "$dll" ] && walk_deps "$dll" SEEN
+        [ -f "$dll" ] && walk_deps "$dll"
     done
 done
 
