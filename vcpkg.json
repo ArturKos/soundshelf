@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "soundshelf",
+  "version": "0.3.0",
+  "description": "Cross-platform audio catalog and player",
+  "dependencies": [
+    "taglib",
+    "sqlite3",
+    "zlib",
+    {
+      "name": "fftw3",
+      "default-features": false
+    },
+    "chromaprint"
+  ],
+  "overrides": [],
+  "builtin-baseline": "495848814af4cc2760e70f7440c2dbe66d3ff196"
+}

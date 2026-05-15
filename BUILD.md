@@ -40,26 +40,49 @@ sudo dnf install \
     cmake gcc-c++ pkgconf-pkg-config
 ```
 
-## Windows (vcpkg + MSVC 2022)
+## Windows — Option A: MSVC + vcpkg (recommended)
+
+Static-links C/C++ deps (TagLib, SQLite, fftw3, chromaprint) into the
+executable. Only Qt and libmpv ship as DLLs → bundle drops from ~250 MB /
+147 DLLs to ~80 MB / ~20 DLLs.
+
+**Prerequisites:** Visual Studio 2022 Build Tools (C++ workload), CMake 3.21+,
+Ninja, Qt 6.5+ (via [aqtinstall](https://github.com/miurahr/aqtinstall) or the
+Qt Online Installer).
 
 ```powershell
-# 1. Install vcpkg
-git clone https://github.com/microsoft/vcpkg.git
-cd vcpkg
-.\bootstrap-vcpkg.bat
-.\vcpkg integrate install
+# 1. Run the one-time setup (clones vcpkg, downloads mpv-dev SDK)
+.\scripts\setup-windows-vcpkg.ps1
 
-# 2. Install dependencies
-.\vcpkg install qtbase:x64-windows qttools:x64-windows
-.\vcpkg install mpv:x64-windows taglib:x64-windows
-.\vcpkg install libcdio:x64-windows
-.\vcpkg install chromaprint:x64-windows libebur128:x64-windows
-.\vcpkg install sqlite3:x64-windows fftw3:x64-windows
+# 2. Configure + build via CMake preset
+cmake --preset windows-vcpkg
+cmake --build build-vcpkg -j
 
-# 3. Build SoundShelf
-cd path\to\soundshelf
-cmake -B build -DCMAKE_TOOLCHAIN_FILE=C:\path\to\vcpkg\scripts\buildsystems\vcpkg.cmake
-cmake --build build --config Release
+# 3. Deploy standalone bundle
+bash scripts/windows-deploy-vcpkg.sh
+# → dist/soundshelf-win64-vcpkg/
+```
+
+Or manually:
+```powershell
+cmake -G Ninja -B build-vcpkg `
+    -DCMAKE_TOOLCHAIN_FILE=vcpkg/scripts/buildsystems/vcpkg.cmake `
+    -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
+    -DMPV_DIR=external/mpv-dev `
+    -DCMAKE_BUILD_TYPE=Release
+cmake --build build-vcpkg -j
+```
+
+## Windows — Option B: MSYS2 MinGW64 (legacy)
+
+Uses MSYS2 pacman packages (all dynamic). Larger bundle but simpler toolchain.
+
+```bash
+# In MSYS2 MINGW64 shell:
+bash scripts/install-deps-windows.sh
+cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+bash scripts/windows-deploy.sh   # → dist/soundshelf-win64/
 ```
 
 ## macOS (Homebrew)
@@ -75,11 +98,15 @@ cmake --build build -j$(sysctl -n hw.ncpu)
 
 | Option | Default | Description |
 |---|---|---|
-| `-DBUILD_TESTING=ON/OFF` | OFF | Build unit tests |
-| `-DBUILD_CLI=ON/OFF` | ON | Build separate `soundshelf-cli` binary |
-| `-DENABLE_HEADLESS_SERVER=ON/OFF` | ON | Build HTTP server for headless mode |
-| `-DENABLE_WINAMP_PLUGINS=ON/OFF` | ON | Winamp visualization plugin support |
-| `-DENABLE_MPRIS=ON/OFF` | ON (Linux) | MPRIS2 D-Bus integration |
+| `-DSOUNDSHELF_BUILD_TESTS=ON/OFF` | OFF | Build unit tests |
+| `-DSOUNDSHELF_BUILD_GUI=ON/OFF` | ON | Build the Qt GUI binary |
+| `-DSOUNDSHELF_BUILD_CLI=ON/OFF` | ON | Build separate `soundshelf-cli` binary |
+| `-DSOUNDSHELF_ENABLE_HTTPSERVER=ON/OFF` | ON | QHttpServer for headless mode |
+| `-DSOUNDSHELF_ENABLE_MPRIS=ON/OFF` | ON (Linux) | MPRIS2 D-Bus integration |
+| `-DSOUNDSHELF_ENABLE_LIBCDIO=ON/OFF` | ON | CD-DA reading via libcdio |
+| `-DSOUNDSHELF_ENABLE_CHROMAPRINT=ON/OFF` | ON | AcoustID fingerprinting |
+| `-DSOUNDSHELF_ENABLE_EBUR128=ON/OFF` | ON | EBU R128 loudness analysis |
+| `-DSOUNDSHELF_ENABLE_FFTW3=ON/OFF` | ON | FFTW3 for spectrum FFT |
 | `-DCMAKE_BUILD_TYPE` | Release | Debug / Release / RelWithDebInfo |
 
 ## Compiling translations
@@ -97,9 +124,9 @@ lrelease *.ts  # produces .qm
 ## Running tests
 
 ```bash
-cmake -B build -DBUILD_TESTING=ON
+cmake -B build -DSOUNDSHELF_BUILD_TESTS=ON
 cmake --build build -j
-cd build && ctest --output-on-failure
+ctest --test-dir build --output-on-failure
 ```
 
 ## Database location

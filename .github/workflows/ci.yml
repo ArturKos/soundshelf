@@ -49,13 +49,11 @@ jobs:
             build/soundshelf-cli
           retention-days: 14
 
-  windows:
+  windows-msys2:
     name: Windows (MSYS2 MinGW64)
     runs-on: windows-latest
     defaults:
       run:
-        # Run every step inside the MINGW64 MSYS2 environment so that
-        # /mingw64/bin tools (cmake, gcc, qmake6, pkgconf) are on PATH.
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
@@ -87,10 +85,6 @@ jobs:
 
       - name: Patch upstream .pc files
         run: |
-          # Three MSYS2 packages ship with literal '-I/mingw64/include'
-          # (instead of '-I${includedir}') in their .pc files, which
-          # confuses native-Windows CMake. Same fix as scripts/install-
-          # deps-windows.sh applies in CI.
           for f in /mingw64/lib/pkgconfig/isl.pc \
                    /mingw64/lib/pkgconfig/mujs.pc \
                    /mingw64/lib/pkgconfig/tre.pc; do
@@ -111,12 +105,84 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-      - name: Upload binaries
+      - name: Deploy bundle
+        run: bash scripts/windows-deploy.sh dist/soundshelf-win64
+
+      - name: Upload bundle
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: soundshelf-windows-x86_64
-          path: |
-            build/soundshelf.exe
-            build/soundshelf-cli.exe
+          name: soundshelf-windows-msys2-bundle
+          path: dist/soundshelf-win64/
+          retention-days: 14
+
+  windows-vcpkg:
+    name: Windows (MSVC + vcpkg)
+    runs-on: windows-latest
+    env:
+      VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
+      MPV_DEV_URL: "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-v3-20260419-git-06f4ce7.7z/download"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.*'
+          arch: win64_msvc2022_64
+          modules: qthttpserver qtmultimedia qtsvg
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgGitCommitId: 495848814af4cc2760e70f7440c2dbe66d3ff196
+
+      - name: Download mpv-dev SDK
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path external -Force | Out-Null
+          $archive = "external\mpv-dev.7z"
+          curl.exe -L -o $archive $env:MPV_DEV_URL
+          7z x $archive -o"external\mpv-dev" -y
+          # Create MSVC import lib from .def
+          $def = Get-ChildItem "external\mpv-dev" -Filter "*.def" -Recurse |
+                 Select-Object -First 1
+          if ($def) {
+              New-Item -ItemType Directory -Path "external\mpv-dev\lib" -Force | Out-Null
+              lib /def:"$($def.FullName)" /out:"external\mpv-dev\lib\mpv.lib" /machine:x64
+          }
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -G Ninja -B build-vcpkg `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static-md `
+            -DMPV_DIR="${{ github.workspace }}/external/mpv-dev" `
+            -DSOUNDSHELF_BUILD_TESTS=ON `
+            -DSOUNDSHELF_ENABLE_LIBCDIO=OFF
+
+      - name: Build
+        run: cmake --build build-vcpkg -j
+
+      - name: Test
+        shell: pwsh
+        env:
+          PATH: ${{ github.workspace }}/external/mpv-dev;${{ env.PATH }}
+        run: ctest --test-dir build-vcpkg --output-on-failure
+
+      - name: Deploy bundle
+        shell: bash
+        run: |
+          bash scripts/windows-deploy-vcpkg.sh dist/soundshelf-win64-vcpkg
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: soundshelf-windows-vcpkg-bundle
+          path: dist/soundshelf-win64-vcpkg/
           retention-days: 14

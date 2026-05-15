@@ -59,6 +59,15 @@ secrets.enc
 *.db-wal
 *.log
 
+# vcpkg (cloned locally, not committed)
+vcpkg/
+
+# Pre-built external SDKs (downloaded by setup scripts)
+external/
+
+# Distribution bundles
+dist/
+
 # Coverage
 *.gcda
 *.gcno

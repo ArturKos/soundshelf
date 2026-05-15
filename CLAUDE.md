@@ -200,6 +200,9 @@ przyszłości jeśli potrzeba, ale na razie nie.
 ```
 soundshelf/
 ├── CMakeLists.txt              # główny build
+├── CMakePresets.json           # presety: linux-debug, windows-vcpkg, etc.
+├── vcpkg.json                  # vcpkg manifest (Windows MSVC path)
+├── cmake/FindMPV.cmake         # custom Find module dla pre-built libmpv
 ├── CLAUDE.md                   # ten plik
 ├── README.md                   # README usera
 ├── ARCHITECTURE.md             # szczegóły architektury
@@ -218,7 +221,10 @@ soundshelf/
 ├── translations/               # .ts files (en/pl/de/fr)
 ├── migrations/                 # 001_initial.sql, 002_*.sql, ...
 ├── resources/                  # ikony, presety EQ, themes
+├── scripts/                    # install-deps, setup-vcpkg, deploy
 ├── tests/                      # unit testy (Qt Test)
+├── external/                   # (gitignored) pre-built mpv-dev SDK
+├── vcpkg/                      # (gitignored) vcpkg clone
 └── docs/                       # dokumentacja deweloperska
 ```
 

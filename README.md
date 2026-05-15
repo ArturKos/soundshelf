@@ -104,8 +104,9 @@ This file is updated as the stubs land their first implementations.
 
 ## Quick start
 
+### Linux
+
 ```bash
-# Build (Linux)
 sudo apt install qt6-base-dev qt6-tools-dev libmpv-dev libtag1-dev \
                  libcdio-paranoia-dev libchromaprint-dev libebur128-dev \
                  libdiscid-dev libsqlite3-dev libfftw3-dev cmake g++
@@ -115,20 +116,30 @@ cd soundshelf
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DSOUNDSHELF_BUILD_TESTS=ON
 cmake --build build -j
 
-# Run GUI
-./build/soundshelf
-
-# Run CLI
-./build/soundshelf-cli list --fmt json | jq '.[0:5]'
-
-# Run as headless server
-./build/soundshelf --serve --port 8080 --bind 0.0.0.0
-
-# Run unit tests
-ctest --test-dir build --output-on-failure
+./build/soundshelf                    # GUI
+./build/soundshelf-cli list           # CLI
+./build/soundshelf --serve --port 8080  # headless server
+ctest --test-dir build --output-on-failure  # tests
 ```
 
-See `BUILD.md` for Windows and detailed build instructions.
+### Windows (MSVC + vcpkg)
+
+C/C++ deps are statically linked via vcpkg — the standalone bundle is ~80 MB
+with only Qt and libmpv as DLLs (vs. ~250 MB / 147 DLLs with MinGW).
+
+```powershell
+# One-time setup: clones vcpkg, downloads pre-built libmpv SDK
+.\scripts\setup-windows-vcpkg.ps1
+
+# Build via CMake preset
+cmake --preset windows-vcpkg
+cmake --build build-vcpkg -j
+
+# Create deployable bundle
+bash scripts/windows-deploy-vcpkg.sh   # → dist/soundshelf-win64-vcpkg/
+```
+
+An MSYS2 MinGW64 build path is also available — see `BUILD.md` for details.
 
 ## Documentation
 
