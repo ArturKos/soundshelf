@@ -73,3 +73,8 @@ dist/
 *.gcno
 *.info
 coverage/
+
+# Autonomous agent workflow runtime state (local only)
+.workflow/
+__pycache__/
+*.pyc
