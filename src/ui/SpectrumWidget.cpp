@@ -42,11 +42,42 @@ void SpectrumWidget::setActivePlugin(VisualizationPlugin* plugin) {
 void SpectrumWidget::paintEvent(QPaintEvent* /*ev*/) {
     QPainter p(this);
     p.fillRect(rect(), palette().window());
-    if (!m_plugin || !m_engine) return;
+    if (!m_engine) return;
 
-    m_lastSpectrum = m_engine->spectrumData(48);
-    QVector<float> pcm;  // empty for now — plugin can opt out via Feed
-    m_plugin->render(p, QRectF(rect()), pcm, m_lastSpectrum);
+    const int bars = qMax(8, width() / 8);
+    m_lastSpectrum = m_engine->spectrumData(bars);
+
+    // An active Winamp/native plugin takes over the whole surface.
+    if (m_plugin) {
+        QVector<float> pcm;  // PCM tap not wired yet; plugins can opt out
+        m_plugin->render(p, QRectF(rect()), pcm, m_lastSpectrum);
+        return;
+    }
+
+    drawBuiltinBars(p);
+}
+
+void SpectrumWidget::drawBuiltinBars(QPainter& p) {
+    const int n = m_lastSpectrum.size();
+    if (n <= 0) return;
+
+    const qreal w = qreal(width()) / n;
+    const qreal h = height();
+
+    // Retro phosphor-green gradient, brighter towards the top.
+    QLinearGradient grad(0, h, 0, 0);
+    grad.setColorAt(0.0, QColor(0, 120, 0));
+    grad.setColorAt(0.6, QColor(0, 220, 60));
+    grad.setColorAt(1.0, QColor(180, 255, 120));
+
+    p.setPen(Qt::NoPen);
+    p.setBrush(grad);
+    for (int i = 0; i < n; ++i) {
+        const qreal level = qBound(0.0f, m_lastSpectrum[i], 1.0f);
+        const qreal barH = level * (h - 2);
+        const QRectF bar(i * w + 1, h - barH, w - 2, barH);
+        p.drawRect(bar);
+    }
 }
 
 } // namespace soundshelf

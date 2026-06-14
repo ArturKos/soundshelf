@@ -4,6 +4,8 @@
 #include <QVector>
 #include <QTimer>
 
+class QPainter;
+
 namespace soundshelf {
 
 class PlayerEngine;
@@ -38,6 +40,8 @@ protected:
     void paintEvent(QPaintEvent* ev) override;
 
 private:
+    void drawBuiltinBars(QPainter& p);
+
     PlayerEngine*        m_engine = nullptr;
     VisualizationPlugin* m_plugin = nullptr;
     QTimer               m_tick;
