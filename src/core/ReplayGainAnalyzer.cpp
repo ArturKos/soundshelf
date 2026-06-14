@@ -1,6 +1,10 @@
 #include "soundshelf/core/ReplayGainAnalyzer.hpp"
 
+#include "soundshelf/io/PcmDecoder.hpp"
+#include "soundshelf/io/TagInfo.hpp"
+
 #include <QLoggingCategory>
+#include <cmath>
 
 #ifdef SOUNDSHELF_HAVE_EBUR128
 #  include <ebur128.h>
@@ -28,6 +32,27 @@ double rg2GainFromLufs(double lufs) {
     return -18.0 - lufs;
 }
 
+/// Loudness below this is treated as silence (libebur128 returns -inf/-HUGE).
+constexpr double kSilenceLufs = -70.0;
+
+// Decode rate/format fed to libebur128. ReplayGain is insensitive to a fixed
+// 44.1 kHz resample, and a uniform format keeps the pipeline simple.
+constexpr int kRate = 44100;
+constexpr int kChannels = 2;
+
+#ifdef SOUNDSHELF_HAVE_EBUR128
+/// Largest per-channel sample peak (0..1 linear) across all channels.
+double maxSamplePeak(ebur128_state* st, int channels) {
+    double peak = 0.0;
+    for (int c = 0; c < channels; ++c) {
+        double p = 0.0;
+        if (ebur128_sample_peak(st, static_cast<unsigned>(c), &p) == EBUR128_SUCCESS)
+            peak = std::max(peak, p);
+    }
+    return peak;
+}
+#endif
+
 } // namespace
 
 Result<ReplayGainAnalyzer::TrackResult>
@@ -37,15 +62,36 @@ ReplayGainAnalyzer::analyseFile(const QString& path) {
     return Result<TrackResult>::err(Error::DependencyMissing,
         QStringLiteral("libebur128 not compiled in"));
 #else
-    // libebur128 needs PCM, which means we'd be decoding here.
-    // The recommended path is to feed it from PlayerEngine's PCM tap
-    // (the same callback used for the spectrum/visualisation), or to
-    // shell out to `ffmpeg -f s16le ...` and pump samples in.
-    // We expose the API and the LUFS→RG conversion; the decode glue
-    // is left for the integration with PlayerEngine.
-    Q_UNUSED(path);
-    return Result<TrackResult>::err(Error::NotImplemented,
-        QStringLiteral("PCM-source pipeline pending PlayerEngine PCM tap"));
+    ebur128_state* st = ebur128_init(kChannels, kRate,
+        EBUR128_MODE_I | EBUR128_MODE_SAMPLE_PEAK);
+    if (!st) {
+        return Result<TrackResult>::err(Error::Unknown,
+            QStringLiteral("ebur128_init failed"));
+    }
+
+    auto fed = PcmDecoder::streamS16(path,
+        [st](const int16_t* samples, int frames) {
+            return ebur128_add_frames_short(st, samples,
+                static_cast<size_t>(frames)) == EBUR128_SUCCESS;
+        }, kRate, kChannels);
+    if (!fed) {
+        ebur128_destroy(&st);
+        return Result<TrackResult>::err(fed.error().code, fed.error().message);
+    }
+
+    double lufs = kSilenceLufs;
+    ebur128_loudness_global(st, &lufs);
+    if (!std::isfinite(lufs) || lufs < kSilenceLufs) lufs = kSilenceLufs;
+
+    TrackResult tr;
+    tr.integratedLufs = lufs;
+    tr.trackGainDb    = (lufs <= kSilenceLufs) ? 0.0 : rg2GainFromLufs(lufs);
+    tr.trackPeak      = maxSamplePeak(st, kChannels);
+    ebur128_destroy(&st);
+
+    qCDebug(lcRg) << path << "LUFS=" << tr.integratedLufs
+                  << "gain=" << tr.trackGainDb << "peak=" << tr.trackPeak;
+    return Result<TrackResult>::ok(tr);
 #endif
 }
 
@@ -56,49 +102,86 @@ ReplayGainAnalyzer::analyseAlbum(const QList<QString>& paths) {
     return Result<AlbumResult>::err(Error::DependencyMissing,
         QStringLiteral("libebur128 not compiled in"));
 #else
+    if (paths.isEmpty()) {
+        return Result<AlbumResult>::err(Error::InvalidArgument,
+            QStringLiteral("no files to analyse"));
+    }
+
     AlbumResult album;
     QList<ebur128_state*> states;
     states.reserve(paths.size());
+
+    auto cleanup = [&states]() { for (auto* s : states) ebur128_destroy(&s); };
+
+    double maxPeak = 0.0;
     for (const QString& p : paths) {
-        auto tr = analyseFile(p);
-        if (!tr) {
-            for (auto* s : states) ebur128_destroy(&s);
-            return Result<AlbumResult>::err(tr.error().code, tr.error().message);
+        ebur128_state* st = ebur128_init(kChannels, kRate,
+            EBUR128_MODE_I | EBUR128_MODE_SAMPLE_PEAK);
+        if (!st) { cleanup(); return Result<AlbumResult>::err(Error::Unknown,
+            QStringLiteral("ebur128_init failed")); }
+
+        auto fed = PcmDecoder::streamS16(p,
+            [st](const int16_t* samples, int frames) {
+                return ebur128_add_frames_short(st, samples,
+                    static_cast<size_t>(frames)) == EBUR128_SUCCESS;
+            }, kRate, kChannels);
+        if (!fed) {
+            ebur128_destroy(&st); cleanup();
+            return Result<AlbumResult>::err(fed.error().code, fed.error().message);
         }
-        album.tracks.append(tr.value());
+        states.append(st);
+
+        double lufs = kSilenceLufs;
+        ebur128_loudness_global(st, &lufs);
+        if (!std::isfinite(lufs) || lufs < kSilenceLufs) lufs = kSilenceLufs;
+
+        TrackResult tr;
+        tr.integratedLufs = lufs;
+        tr.trackGainDb    = (lufs <= kSilenceLufs) ? 0.0 : rg2GainFromLufs(lufs);
+        tr.trackPeak      = maxSamplePeak(st, kChannels);
+        maxPeak = std::max(maxPeak, tr.trackPeak);
+        album.tracks.append(tr);
     }
-    if (!album.tracks.isEmpty()) {
-        double sumLufs = 0;
-        double maxPeak = 0;
-        for (const auto& t : album.tracks) {
-            sumLufs += t.integratedLufs;
-            if (t.trackPeak > maxPeak) maxPeak = t.trackPeak;
-        }
-        album.integratedLufs = sumLufs / album.tracks.size();
-        album.albumGainDb = rg2GainFromLufs(album.integratedLufs);
-        album.albumPeak = maxPeak;
-    }
+
+    // Album loudness is computed over the union of all measurements, not the
+    // arithmetic mean of per-track LUFS (which would be wrong).
+    double albumLufs = kSilenceLufs;
+    ebur128_loudness_global_multiple(states.data(),
+        static_cast<size_t>(states.size()), &albumLufs);
+    if (!std::isfinite(albumLufs) || albumLufs < kSilenceLufs) albumLufs = kSilenceLufs;
+
+    album.integratedLufs = albumLufs;
+    album.albumGainDb    = (albumLufs <= kSilenceLufs) ? 0.0 : rg2GainFromLufs(albumLufs);
+    album.albumPeak      = maxPeak;
+
+    cleanup();
+    qCDebug(lcRg) << "album LUFS=" << album.integratedLufs
+                  << "gain=" << album.albumGainDb << "peak=" << album.albumPeak;
     return Result<AlbumResult>::ok(std::move(album));
 #endif
 }
 
 Result<void> ReplayGainAnalyzer::writeTagsTrack(const QString& path,
                                                 const TrackResult& tr) const {
-    Q_UNUSED(path);
-    Q_UNUSED(tr);
-    // Real implementation goes through TagLib's TXXX:replaygain_track_gain
-    // (ID3v2) / `REPLAYGAIN_TRACK_GAIN` (Vorbis/FLAC). Placeholder until
-    // the analyser is wired to a working PCM source.
-    return Result<void>::err(Error::NotImplemented,
-        QStringLiteral("RG tag write pending analyser PCM source"));
+    auto info = TagInfo::fromFile(path);
+    if (!info) return Result<void>::err(info.error().code, info.error().message);
+    TagInfo t = info.value();
+    t.rgTrackGain = tr.trackGainDb;
+    t.rgTrackPeak = tr.trackPeak;
+    return t.saveTo(path);
 }
 
 Result<void> ReplayGainAnalyzer::writeTagsAlbum(const QString& path,
                                                 const TrackResult& tr,
                                                 const AlbumResult& al) const {
-    Q_UNUSED(path); Q_UNUSED(tr); Q_UNUSED(al);
-    return Result<void>::err(Error::NotImplemented,
-        QStringLiteral("RG tag write pending analyser PCM source"));
+    auto info = TagInfo::fromFile(path);
+    if (!info) return Result<void>::err(info.error().code, info.error().message);
+    TagInfo t = info.value();
+    t.rgTrackGain = tr.trackGainDb;
+    t.rgTrackPeak = tr.trackPeak;
+    t.rgAlbumGain = al.albumGainDb;
+    t.rgAlbumPeak = al.albumPeak;
+    return t.saveTo(path);
 }
 
 } // namespace soundshelf

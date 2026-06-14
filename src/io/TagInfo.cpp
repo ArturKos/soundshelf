@@ -260,8 +260,11 @@ Result<TagInfo> TagInfo::fromFile(const QString& path) {
     info.comment = tlString(tag->comment());
     info.trackNumber = static_cast<int>(tag->track());
 
-    // PropertyMap dla bardziej zaawansowanych pól
-    const auto props = tag->properties();
+    // PropertyMap dla bardziej zaawansowanych pól. Czytamy przez
+    // File::properties() (nie Tag::properties()) — ten pierwszy zwraca custom
+    // klucze jak REPLAYGAIN_* / ACOUSTID_ID z natywnych ramek (Xiph, ID3v2
+    // TXXX/RVA2, MP4), które generyczny Tag potrafi pominąć.
+    const auto props = ref.file()->properties();
     extractReplayGain(props, info);
     extractMusicBrainzIds(props, info);
 
@@ -366,7 +369,11 @@ Result<void> TagInfo::saveTo(const QString& path,
     if (!mbRecordingId.isEmpty()) {
         props.replace("MUSICBRAINZ_TRACKID", fromQ(mbRecordingId));
     }
-    tag->setProperties(props);
+    // Write through File::setProperties (not the generic Tag::setProperties):
+    // the latter silently drops custom keys like REPLAYGAIN_* / ACOUSTID_ID
+    // for several formats, whereas File::setProperties maps them to the right
+    // native frames (Xiph comments, ID3v2 TXXX/RVA2, MP4 atoms).
+    ref.file()->setProperties(props);
 
     if (!ref.save()) {
         return Result<void>::err(Error::FileAccessDenied,

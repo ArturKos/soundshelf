@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QString>
+#include <optional>
 #include "soundshelf/core/Result.hpp"
 #include "soundshelf/core/Track.hpp"
 #include "soundshelf/core/Disc.hpp"
@@ -38,6 +39,13 @@ public:
     Result<QList<Track>> searchTracks(const QString& query, int limit = 100);
     Result<QList<Track>> listTracks(int limit = 1000, int offset = 0);
     Result<void> updatePlayCount(int trackId);
+    /// Writes ReplayGain values for a track. Pass std::nullopt to leave a
+    /// column untouched (e.g. track-only analysis leaves album_* alone).
+    Result<void> updateReplayGain(int trackId,
+                                  std::optional<double> trackGain,
+                                  std::optional<double> trackPeak,
+                                  std::optional<double> albumGain = std::nullopt,
+                                  std::optional<double> albumPeak = std::nullopt);
     Result<void> markMissing(int trackId, bool missing);
 
     // ------- Disc operations -------

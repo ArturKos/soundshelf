@@ -7,6 +7,7 @@
 #include "soundshelf/core/DiscManager.hpp"
 #include "soundshelf/core/PluginManager.hpp"
 #include "soundshelf/core/Scrobbler.hpp"
+#include "soundshelf/core/ReplayGainAnalyzer.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
 #include "soundshelf/data/PlayHistory.hpp"
 #include "soundshelf/data/SchemaMigrator.hpp"
@@ -585,7 +586,65 @@ int CLIController::cmdDisc(const QStringList& args) {
     return 1;
 }
 
-int CLIController::cmdReplaygain(const QStringList& args)  { Q_UNUSED(args); stdErr() << "TODO: replaygain\n"; return 0; }
+int CLIController::cmdReplaygain(const QStringList& args) {
+    if (!ReplayGainAnalyzer::isAvailable()) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "ReplayGain analysis needs libebur128 (not compiled in).") << "\n";
+        return 1;
+    }
+    if (args.isEmpty()) {
+        stdErr() << "Usage: replaygain <id|path> [--write] | --all [--write]\n";
+        return 1;
+    }
+    const bool write = args.contains(QStringLiteral("--write"));
+    ReplayGainAnalyzer rg;
+
+    // Build the work list: (trackId or -1, filepath).
+    QList<QPair<int, QString>> work;
+    if (args.contains(QStringLiteral("--all"))) {
+        auto* d = db(); if (!d) return 2;
+        auto r = d->listTracks(1000000);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        for (const auto& t : r.value()) work.append({t.id, t.filepath});
+    } else {
+        QString target = args[0];
+        bool isId; const int id = target.toInt(&isId);
+        if (isId) {
+            auto* d = db(); if (!d) return 2;
+            auto r = d->getTrack(id);
+            if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+            work.append({id, r.value().filepath});
+        } else {
+            work.append({-1, target});
+        }
+    }
+
+    int done = 0, failed = 0;
+    for (const auto& [trackId, path] : work) {
+        auto r = rg.analyseFile(path);
+        if (!r) { ++failed; stdErr() << "x " << path << ": " << r.error().message << "\n"; continue; }
+        const auto& tr = r.value();
+        if (!m_quiet)
+            stdOut() << QString("%1  %2 LUFS  gain %3 dB  peak %4\n")
+                .arg(QFileInfo(path).fileName().left(40), -40)
+                .arg(tr.integratedLufs, 6, 'f', 1)
+                .arg(tr.trackGainDb, 6, 'f', 2)
+                .arg(tr.trackPeak, 0, 'f', 4);
+        if (trackId >= 0) {
+            if (auto* d = db())
+                d->updateReplayGain(trackId, tr.trackGainDb, tr.trackPeak);
+        }
+        if (write) {
+            auto w = rg.writeTagsTrack(path, tr);
+            if (!w) stdErr() << "  (tag write failed: " << w.error().message << ")\n";
+        }
+        ++done;
+    }
+    stdOut() << QCoreApplication::translate("CLI", "ReplayGain: %1 analysed, %2 failed")
+                .arg(done).arg(failed) << "\n";
+    return failed && !done ? 2 : 0;
+}
+
 int CLIController::cmdFingerprint(const QStringList& args) { Q_UNUSED(args); stdErr() << "TODO: fingerprint\n"; return 0; }
 
 int CLIController::cmdConvert(const QStringList& args) {

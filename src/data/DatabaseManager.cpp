@@ -309,6 +309,31 @@ Result<void> DatabaseManager::updatePlayCount(int trackId) {
     return Result<void>::ok();
 }
 
+Result<void> DatabaseManager::updateReplayGain(int trackId,
+                                               std::optional<double> trackGain,
+                                               std::optional<double> trackPeak,
+                                               std::optional<double> albumGain,
+                                               std::optional<double> albumPeak) {
+    QStringList sets;
+    if (trackGain) sets << QStringLiteral("rg_track_gain = ?");
+    if (trackPeak) sets << QStringLiteral("rg_track_peak = ?");
+    if (albumGain) sets << QStringLiteral("rg_album_gain = ?");
+    if (albumPeak) sets << QStringLiteral("rg_album_peak = ?");
+    if (sets.isEmpty()) return Result<void>::ok();
+
+    QSqlQuery q(m_db);
+    q.prepare(QStringLiteral("UPDATE tracks SET %1 WHERE id = ?").arg(sets.join(", ")));
+    if (trackGain) q.addBindValue(*trackGain);
+    if (trackPeak) q.addBindValue(*trackPeak);
+    if (albumGain) q.addBindValue(*albumGain);
+    if (albumPeak) q.addBindValue(*albumPeak);
+    q.addBindValue(trackId);
+    if (!q.exec()) {
+        return Result<void>::err(Error::DatabaseError, q.lastError().text());
+    }
+    return Result<void>::ok();
+}
+
 Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle,
                                               int artistId,
                                               const QByteArray& coverData) {
