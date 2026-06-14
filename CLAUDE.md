@@ -316,27 +316,47 @@ Global hotkeys (system-wide, można wyłączyć):
 
 ---
 
-## Status implementacji (na 2026-04-25)
+## Status implementacji (na 2026-06-14)
+
+> Stan po fazach A/B/C i ścieżce build Windows (vcpkg + MSVC static).
+> Cross-platform compile + testy zweryfikowane na Linux i Windows 10.
 
 | Moduł | Status |
 |---|---|
-| Schema bazy + migracje | szkielet kodu, DDL kompletny |
-| TagInfo (TagLib wrapper) | działający kod |
-| DiscReader interfejs + implementacje | `FolderReader` działa, `CDDAReader` szkielet, `ImageReader` stub |
-| ReplayGainAnalyzer | szkielet z libebur128 |
-| Translator | działający kod |
-| SmartPlaylistEvaluator | działający kod |
-| CLIController + parser | działający kod (większość komend) |
-| PlayerEngine (libmpv) | szkielet, brak callback chain |
-| MainWindow + UI | szkielety klas, layout w mockup'ach |
-| Visualization plugins (Winamp adapter) | TODO — wymaga prawdziwych testów na DLLce |
-| MPRIS adapter | TODO |
-| HTTP server | TODO |
-| Last.fm scrobbler | TODO |
-| Tłumaczenia | seedowe stringi w 4 językach |
+| Schema bazy + migracje | **działa** — migracje 001–005 (replaygain, acoustid, smart_playlists, play_history), `SchemaMigrator` + `DatabaseManager` pełne |
+| TagInfo (TagLib wrapper) | **działa** (read+write, encoding fallback) |
+| DiscReader — `FolderReader` | **działa** |
+| DiscReader — `CDDAReader` | **działa** — libcdio/paranoia + discid, WAV out (kompilowane pod `SOUNDSHELF_HAVE_LIBCDIO`) |
+| DiscReader — `ImageReader` / `CueParser` | `CueParser` **działa** (z testem); `ImageReader` częściowy |
+| `DiscRipper` | **działa** (rip + tag) |
+| ReplayGainAnalyzer | **stub** — analiza zwraca `NotImplemented`, czyta tylko istniejące tagi RG (libebur128 niewpięte) |
+| ChromaprintEngine / AcoustID | **stub** — `compute()` zwraca `NotImplemented` |
+| Translator + tłumaczenia | **działa**; `.ts` dla en/pl/de/fr (stringi seedowe, do uzupełnienia) |
+| SmartPlaylistEvaluator | **działa** |
+| PlaylistManager + import/export (M3U/PLS/XSPF) | **działa** |
+| DuplicateDetector | **działa** (z testem) |
+| FormatConverter (ffmpeg) | **działa** |
+| PlayerEngine (libmpv) | **podstawy działają** (play/seek/vol/auto-advance); crossfade, ładowanie presetów EQ i prawdziwy FFT tap = TODO (placeholdery) |
+| MainWindow + UI | **wpięte end-to-end** (import → biblioteka → playback); większość widgetów ma realny kod |
+| MPRIS adapter | **działa** (Linux/QtDBus) |
+| HTTP server (headless `--serve`) | **działa** — `main.cpp --serve --port`, Bearer token, REST przez `HttpServer` |
+| Last.fm / ListenBrainz scrobbler | **działa** — `Scrobbler` + `ScrobbleDrainer` (kolejka offline) + podpis Last.fm (z testem) |
+| MusicBrainz / CoverArt / DiscEnricher | **działa** (metadata fallback + enrichment płyt) |
+| LyricsClient (LRCLib) + LyricsWidget | **działa** |
+| Visualization plugins (Winamp adapter) | **częściowe** — `WinampVisAdapter`/`NativeVisPlugin`/`PluginManager` są, ale `SpectrumWidget` FFT = placeholder; brak testów na realnej DLL |
+| CLI (`soundshelf-cli`) | **częściowe** — parser + część komend; nadal stuby (TODO): `next`, `prev`, `disc`, `replaygain`, `fingerprint`, `convert`, `duplicates`, `playlist`, `remote`, `serve`, `daemon`, `scrobble`, `plugin`, `stats`, `export`, `db` + IPC do GUI |
+| Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows) |
+| Testy | 10 plików (cue, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator) |
 
-**Zadanie dla Claude Code:** dokończenie modułów oznaczonych "TODO" / "stub",
-rozszerzenie testów, integracja z prawdziwymi bibliotekami (`brew install qt6 libmpv taglib libcdio chromaprint libebur128`).
+**Następne kroki / co zostało (TODO):**
+- ReplayGain: wpiąć libebur128 do realnej analizy (`ReplayGainAnalyzer`)
+- AcoustID/Chromaprint: zaimplementować `ChromaprintEngine::compute()` + pipeline
+- PlayerEngine: crossfade (druga instancja mpv), ładowanie presetów EQ z `resources/eq_presets/*.json`, prawdziwy FFT z PCM tap
+- Visualization: testy na realnej Winamp vis DLL, podłączyć FFT do `SpectrumWidget`
+- CLI: dokończyć stubowane komendy + IPC (D-Bus/named pipe) do działającego GUI
+- Tłumaczenia: uzupełnić `.ts` poza seedem
+
+Integracja z bibliotekami systemowymi: `qt6 libmpv taglib libcdio chromaprint libebur128`.
 
 ---
 
