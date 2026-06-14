@@ -8,6 +8,8 @@
 #include "soundshelf/core/PluginManager.hpp"
 #include "soundshelf/core/Scrobbler.hpp"
 #include "soundshelf/core/ReplayGainAnalyzer.hpp"
+#include "soundshelf/core/ChromaprintEngine.hpp"
+#include "soundshelf/network/AcoustIDClient.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
 #include "soundshelf/data/PlayHistory.hpp"
 #include "soundshelf/data/SchemaMigrator.hpp"
@@ -26,6 +28,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QEventLoop>
+#include <QFutureWatcher>
 #include <QHostAddress>
 #include <QUuid>
 #include <QSqlQuery>
@@ -645,7 +648,106 @@ int CLIController::cmdReplaygain(const QStringList& args) {
     return failed && !done ? 2 : 0;
 }
 
-int CLIController::cmdFingerprint(const QStringList& args) { Q_UNUSED(args); stdErr() << "TODO: fingerprint\n"; return 0; }
+int CLIController::cmdFingerprint(const QStringList& args) {
+    if (!ChromaprintEngine::isAvailable()) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Fingerprinting needs libchromaprint (not compiled in).") << "\n";
+        return 1;
+    }
+    if (args.isEmpty()) {
+        stdErr() << "Usage: fingerprint <id|path> [--lookup] | --all [--lookup]\n";
+        return 1;
+    }
+    const bool lookup = args.contains(QStringLiteral("--lookup"));
+
+    QList<QPair<int, QString>> work;
+    if (args.contains(QStringLiteral("--all"))) {
+        auto* d = db(); if (!d) return 2;
+        auto r = d->listTracks(1000000);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        for (const auto& t : r.value()) work.append({t.id, t.filepath});
+    } else {
+        QString target = args[0];
+        bool isId; const int id = target.toInt(&isId);
+        if (isId) {
+            auto* d = db(); if (!d) return 2;
+            auto r = d->getTrack(id);
+            if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+            work.append({id, r.value().filepath});
+        } else {
+            work.append({-1, target});
+        }
+    }
+
+    // AcoustID lookup needs a per-application API key (acoustid.api_key).
+    QString apiKey;
+    if (lookup) {
+        if (auto* d = db()) {
+            if (auto k = d->getSetting(QStringLiteral("acoustid.api_key")); k)
+                apiKey = k.value();
+        }
+        if (apiKey.isEmpty()) {
+            stdErr() << QCoreApplication::translate("CLI",
+                "--lookup needs an AcoustID API key. Set it with: "
+                "soundshelf db ... or store 'acoustid.api_key' in settings "
+                "(get a free key at https://acoustid.org/).") << "\n";
+            return 1;
+        }
+    }
+
+    ChromaprintEngine cp;
+    int done = 0, failed = 0;
+    for (const auto& [trackId, path] : work) {
+        auto r = cp.fingerprintFile(path);
+        if (!r) { ++failed; stdErr() << "x " << path << ": " << r.error().message << "\n"; continue; }
+        const auto& fp = r.value();
+        if (!m_quiet)
+            stdOut() << QString("%1  %2s  fp[%3]\n")
+                .arg(QFileInfo(path).fileName().left(36), -36)
+                .arg(fp.durationSec).arg(fp.fingerprint.size());
+        if (m_verbose) stdOut() << fp.fingerprint << "\n";
+
+        if (lookup) {
+            AcoustIDClient client;
+            client.setApiKey(apiKey);
+            QFutureWatcher<Result<QJsonDocument>> watcher;
+            QEventLoop loop;
+            QObject::connect(&watcher, &QFutureWatcherBase::finished, &loop, &QEventLoop::quit);
+            watcher.setFuture(client.lookup(fp.fingerprint, fp.durationSec));
+            loop.exec();
+            const auto res = watcher.result();
+            if (!res) { stdErr() << "  (lookup failed: " << res.error().message << ")\n"; }
+            else {
+                const auto results = res.value().object().value("results").toArray();
+                QString mbid;
+                if (!results.isEmpty()) {
+                    const auto recs = results.first().toObject().value("recordings").toArray();
+                    if (!recs.isEmpty()) mbid = recs.first().toObject().value("id").toString();
+                }
+                if (!mbid.isEmpty()) {
+                    stdOut() << "  → MBID " << mbid << "\n";
+                    if (trackId >= 0) {
+                        if (auto* d = db()) {
+                            QSqlQuery q(d->database());
+                            q.prepare(QStringLiteral(
+                                "UPDATE tracks SET acoustid = ?, mb_recording_id = ? WHERE id = ?"));
+                            q.addBindValue(fp.fingerprint);
+                            q.addBindValue(mbid);
+                            q.addBindValue(trackId);
+                            q.exec();
+                        }
+                    }
+                } else {
+                    stdOut() << "  → no AcoustID match\n";
+                }
+            }
+        }
+        ++done;
+    }
+    stdOut() << QCoreApplication::translate("CLI", "Fingerprint: %1 done, %2 failed")
+                .arg(done).arg(failed) << "\n";
+    return failed && !done ? 2 : 0;
+}
 
 int CLIController::cmdConvert(const QStringList& args) {
     const int toi = args.indexOf(QStringLiteral("--to"));

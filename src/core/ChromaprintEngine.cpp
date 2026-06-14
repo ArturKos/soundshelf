@@ -1,5 +1,7 @@
 #include "soundshelf/core/ChromaprintEngine.hpp"
 
+#include "soundshelf/io/PcmDecoder.hpp"
+
 #include <QLoggingCategory>
 #include <QFile>
 
@@ -25,13 +27,13 @@ bool ChromaprintEngine::isAvailable() {
 Result<ChromaprintEngine::Fingerprint>
 ChromaprintEngine::fingerprintFile(const QString& audioFile) {
 #ifdef SOUNDSHELF_HAVE_CHROMAPRINT
-    // libchromaprint does not decode files itself — the project's audio
-    // pipeline is libmpv. Recommended path: PlayerEngine taps PCM via
-    // its audio callback and forwards a buffer to fingerprintPcm().
-    // Until that pipeline is wired up we report not implemented.
-    Q_UNUSED(audioFile);
-    return Result<Fingerprint>::err(Error::NotImplemented,
-        QStringLiteral("Use fingerprintPcm() with a libmpv PCM tap"));
+    // libchromaprint can decode via its bundled FFmpeg, but to keep one
+    // decoding path (and avoid an extra FFmpeg link) we decode through the
+    // shared PcmDecoder (ffmpeg subprocess) and feed raw PCM to fingerprintPcm.
+    auto pcm = PcmDecoder::decodeToS16(audioFile, 44100, 2);
+    if (!pcm) return Result<Fingerprint>::err(pcm.error().code, pcm.error().message);
+    const auto& buf = pcm.value();
+    return fingerprintPcm(buf.s16le, buf.sampleRate, buf.channels, buf.totalSamples);
 #else
     Q_UNUSED(audioFile);
     return Result<Fingerprint>::err(Error::DependencyMissing,
