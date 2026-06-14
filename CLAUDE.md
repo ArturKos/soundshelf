@@ -318,7 +318,8 @@ Global hotkeys (system-wide, można wyłączyć):
 
 ## Status implementacji (na 2026-06-14)
 
-> Stan po fazach A/B/C i ścieżce build Windows (vcpkg + MSVC static).
+> Stan po fazach A/B/C + faza D (ReplayGain, AcoustID, EQ presety, spektrum FFT,
+> crossfade, dokończone komendy CLI) i ścieżce build Windows (vcpkg + MSVC static).
 > Cross-platform compile + testy zweryfikowane na Linux i Windows 10.
 
 | Moduł | Status |
@@ -329,34 +330,36 @@ Global hotkeys (system-wide, można wyłączyć):
 | DiscReader — `CDDAReader` | **działa** — libcdio/paranoia + discid, WAV out (kompilowane pod `SOUNDSHELF_HAVE_LIBCDIO`) |
 | DiscReader — `ImageReader` / `CueParser` | `CueParser` **działa** (z testem); `ImageReader` częściowy |
 | `DiscRipper` | **działa** (rip + tag) |
-| ReplayGainAnalyzer | **stub** — analiza zwraca `NotImplemented`, czyta tylko istniejące tagi RG (libebur128 niewpięte) |
-| ChromaprintEngine / AcoustID | **stub** — `compute()` zwraca `NotImplemented` |
+| PcmDecoder (ffmpeg → s16le) | **działa** — wspólne źródło PCM dla RG/AcoustID/spektrum (z testem) |
+| ReplayGainAnalyzer | **działa** — EBU R128 przez libebur128 (track+album), zapis tagów, `db updateReplayGain`; wynik zgodny z ffmpeg ebur128 (z testem) |
+| ChromaprintEngine / AcoustID | **działa** — `fingerprintFile` przez PcmDecoder; lookup `AcoustIDClient` (wymaga klucza API) (z testem) |
 | Translator + tłumaczenia | **działa**; `.ts` dla en/pl/de/fr (stringi seedowe, do uzupełnienia) |
 | SmartPlaylistEvaluator | **działa** |
 | PlaylistManager + import/export (M3U/PLS/XSPF) | **działa** |
 | DuplicateDetector | **działa** (z testem) |
 | FormatConverter (ffmpeg) | **działa** |
-| PlayerEngine (libmpv) | **podstawy działają** (play/seek/vol/auto-advance); crossfade, ładowanie presetów EQ i prawdziwy FFT tap = TODO (placeholdery) |
+| PlayerEngine (libmpv) | **działa** — play/seek/vol/auto-advance, presety EQ z JSON, spektrum FFT (FFTW3), crossfade (fade-out przez `Crossfader`). *Future work:* prawdziwy overlap (2. instancja mpv) i PCM tap z libmpv zasilający spektrum w czasie rzeczywistym |
 | MainWindow + UI | **wpięte end-to-end** (import → biblioteka → playback); większość widgetów ma realny kod |
 | MPRIS adapter | **działa** (Linux/QtDBus) |
 | HTTP server (headless `--serve`) | **działa** — `main.cpp --serve --port`, Bearer token, REST przez `HttpServer` |
 | Last.fm / ListenBrainz scrobbler | **działa** — `Scrobbler` + `ScrobbleDrainer` (kolejka offline) + podpis Last.fm (z testem) |
 | MusicBrainz / CoverArt / DiscEnricher | **działa** (metadata fallback + enrichment płyt) |
 | LyricsClient (LRCLib) + LyricsWidget | **działa** |
-| Visualization plugins (Winamp adapter) | **częściowe** — `WinampVisAdapter`/`NativeVisPlugin`/`PluginManager` są, ale `SpectrumWidget` FFT = placeholder; brak testów na realnej DLL |
-| CLI (`soundshelf-cli`) | **częściowe** — parser + część komend; nadal stuby (TODO): `next`, `prev`, `disc`, `replaygain`, `fingerprint`, `convert`, `duplicates`, `playlist`, `remote`, `serve`, `daemon`, `scrobble`, `plugin`, `stats`, `export`, `db` + IPC do GUI |
-| Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows) |
-| Testy | 10 plików (cue, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator) |
+| SpectrumWidget | **działa** — wbudowany retro renderer słupków z `spectrumData()`; ustępuje miejsca aktywnemu pluginowi |
+| Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
+| CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve). `next/prev/daemon/remote` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work |
+| Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
+| Testy | 15 plików (cue, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, **pcm_decoder, replaygain, fingerprint, eq_presets, spectrum**) |
 
-**Następne kroki / co zostało (TODO):**
-- ReplayGain: wpiąć libebur128 do realnej analizy (`ReplayGainAnalyzer`)
-- AcoustID/Chromaprint: zaimplementować `ChromaprintEngine::compute()` + pipeline
-- PlayerEngine: crossfade (druga instancja mpv), ładowanie presetów EQ z `resources/eq_presets/*.json`, prawdziwy FFT z PCM tap
-- Visualization: testy na realnej Winamp vis DLL, podłączyć FFT do `SpectrumWidget`
-- CLI: dokończyć stubowane komendy + IPC (D-Bus/named pipe) do działającego GUI
+**Następne kroki / co zostało (future work):**
+- PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
+- Visualization: test na realnej Winamp vis DLL (Windows + przykładowa DLL)
+- CLI: IPC (D-Bus/named pipe) do działającego GUI dla `next/prev/daemon/remote`
+- AcoustID: konfiguracja klucza API (`acoustid.api_key`) w Preferencjach
 - Tłumaczenia: uzupełnić `.ts` poza seedem
+- ImageReader (obrazy CUE/BIN): dokończyć
 
-Integracja z bibliotekami systemowymi: `qt6 libmpv taglib libcdio chromaprint libebur128`.
+Integracja z bibliotekami systemowymi: `qt6 libmpv taglib libcdio chromaprint libebur128 fftw3 ffmpeg`.
 
 ---
 
