@@ -2,8 +2,19 @@
 
 #include "soundshelf/core/PlayerEngine.hpp"
 #include "soundshelf/core/Translator.hpp"
+#include "soundshelf/core/DuplicateDetector.hpp"
+#include "soundshelf/core/PlaylistManager.hpp"
+#include "soundshelf/core/DiscManager.hpp"
+#include "soundshelf/core/PluginManager.hpp"
+#include "soundshelf/core/Scrobbler.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
+#include "soundshelf/data/PlayHistory.hpp"
+#include "soundshelf/data/SchemaMigrator.hpp"
 #include "soundshelf/io/TagInfo.hpp"
+#include "soundshelf/io/FormatConverter.hpp"
+#include "soundshelf/io/PlaylistExporter.hpp"
+#include "soundshelf/io/PlaylistImporter.hpp"
+#include "soundshelf/network/HttpServer.hpp"
 
 #include <QCoreApplication>
 #include <QTextStream>
@@ -13,6 +24,11 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QDirIterator>
+#include <QEventLoop>
+#include <QHostAddress>
+#include <QUuid>
+#include <QSqlQuery>
+#include <QSqlError>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcCli, "soundshelf.cli")
@@ -406,8 +422,20 @@ int CLIController::cmdPlay(const QStringList& args) {
 int CLIController::cmdPause()  { if (auto* p = player()) p->pause();  return 0; }
 int CLIController::cmdResume() { if (auto* p = player()) p->resume(); return 0; }
 int CLIController::cmdStop()   { if (auto* p = player()) p->stop();   return 0; }
-int CLIController::cmdNext()   { stdErr() << "TODO: next\n"; return 0; }
-int CLIController::cmdPrev()   { stdErr() << "TODO: prev\n"; return 0; }
+int CLIController::cmdNext() {
+    if (tryDelegate(QStringList() << "next")) return 0;
+    stdErr() << QCoreApplication::translate("CLI",
+        "next/prev need a running player (GUI or 'soundshelf serve') — "
+        "the CLI has no persistent queue of its own.") << "\n";
+    return 1;
+}
+int CLIController::cmdPrev() {
+    if (tryDelegate(QStringList() << "prev")) return 0;
+    stdErr() << QCoreApplication::translate("CLI",
+        "next/prev need a running player (GUI or 'soundshelf serve') — "
+        "the CLI has no persistent queue of its own.") << "\n";
+    return 1;
+}
 
 int CLIController::cmdStatus() {
     auto* p = player();
@@ -502,24 +530,419 @@ int CLIController::cmdDisc(const QStringList& args) {
         }
         return 0;
     }
-    stdErr() << "TODO: disc " << sub << "\n";
+    if (sub == "add") {
+        const int fi = args.indexOf(QStringLiteral("--folder"));
+        const int di = args.indexOf(QStringLiteral("--drive"));
+        DiscManager dm;
+        if (fi >= 0 && fi + 1 < args.size()) {
+            auto r = dm.addFromFolder(args[fi + 1]);
+            if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+            stdOut() << QCoreApplication::translate("CLI",
+                "Added disc [%1] from folder").arg(r.value()) << "\n";
+            return 0;
+        }
+        if (di >= 0 && di + 1 < args.size()) {
+            auto r = dm.addFromCdda(args[di + 1]);
+            if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+            stdOut() << QCoreApplication::translate("CLI",
+                "Added disc [%1] from drive").arg(r.value()) << "\n";
+            return 0;
+        }
+        stdErr() << "Usage: disc add --folder <path> | --drive <device>\n";
+        return 1;
+    }
+    if (sub == "tracks") {
+        if (args.size() < 2) { stdErr() << "Usage: disc tracks <id>\n"; return 1; }
+        const int id = args[1].toInt();
+        auto r = d->tracksByDisc(id);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        for (const auto& t : r.value()) {
+            stdOut() << QString("%1. %2 — %3 (%4s)\n")
+                .arg(t.trackNumber, 2).arg(t.title, t.artist)
+                .arg(t.durationMs / 1000);
+        }
+        return 0;
+    }
+    if (sub == "play") {
+        if (args.size() < 2) { stdErr() << "Usage: disc play <id>\n"; return 1; }
+        auto r = d->tracksByDisc(args[1].toInt());
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        if (r.value().isEmpty()) { stdErr() << "Disc has no tracks\n"; return 2; }
+        auto* p = player();
+        if (!p) return 2;
+        p->play(r.value().first());
+        stdOut() << QCoreApplication::translate("CLI", "Playing disc: %1 track(s)")
+                    .arg(r.value().size()) << "\n";
+        return 0;
+    }
+    if (sub == "rip" || sub == "lookup") {
+        stdErr() << QCoreApplication::translate("CLI",
+            "disc %1 needs an optical drive and is best run interactively in the GUI.")
+            .arg(sub) << "\n";
+        return 1;
+    }
+    stdErr() << QCoreApplication::translate("CLI", "Unknown disc subcommand: %1").arg(sub) << "\n";
+    return 1;
+}
+
+int CLIController::cmdReplaygain(const QStringList& args)  { Q_UNUSED(args); stdErr() << "TODO: replaygain\n"; return 0; }
+int CLIController::cmdFingerprint(const QStringList& args) { Q_UNUSED(args); stdErr() << "TODO: fingerprint\n"; return 0; }
+
+int CLIController::cmdConvert(const QStringList& args) {
+    const int toi = args.indexOf(QStringLiteral("--to"));
+    if (args.isEmpty() || toi < 0 || toi + 1 >= args.size()) {
+        stdErr() << "Usage: convert <id|path> --to flac|mp3|ogg|opus|aac|wav\n";
+        return 1;
+    }
+    // Resolve input to a filesystem path (id or path).
+    QString input = args[0];
+    bool isId; const int id = input.toInt(&isId);
+    if (isId) {
+        auto* d = db(); if (!d) return 2;
+        auto r = d->getTrack(id);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        input = r.value().filepath;
+    }
+    if (!QFileInfo::exists(input)) {
+        stdErr() << QCoreApplication::translate("CLI", "Input not found: %1").arg(input) << "\n";
+        return 1;
+    }
+
+    using F = FormatConverter::Format;
+    static const QHash<QString, F> map{
+        {QStringLiteral("mp3"),  F::Mp3V0},   {QStringLiteral("flac"), F::Flac},
+        {QStringLiteral("ogg"),  F::OggVorbis},{QStringLiteral("opus"), F::Opus_128},
+        {QStringLiteral("aac"),  F::Aac_256}, {QStringLiteral("wav"),  F::WavPcm16},
+    };
+    static const QHash<QString, QString> ext{
+        {QStringLiteral("mp3"),"mp3"},{QStringLiteral("flac"),"flac"},
+        {QStringLiteral("ogg"),"ogg"},{QStringLiteral("opus"),"opus"},
+        {QStringLiteral("aac"),"m4a"},{QStringLiteral("wav"),"wav"},
+    };
+    const QString to = args[toi + 1].toLower();
+    if (!map.contains(to)) { stdErr() << "Unknown target format: " << to << "\n"; return 1; }
+
+    FormatConverter::Job job;
+    job.input  = input;
+    job.format = map.value(to);
+    job.overwrite = args.contains(QStringLiteral("--overwrite"));
+    QFileInfo fi(input);
+    job.output = fi.dir().filePath(fi.completeBaseName() + "." + ext.value(to));
+
+    FormatConverter conv;
+    bool ok = false; QString msg;
+    QEventLoop loop;
+    QObject::connect(&conv, &FormatConverter::progress, &conv, [this](int pct) {
+        if (!m_quiet) stdErr() << "\r" << pct << "%   " << Qt::flush;
+    });
+    QObject::connect(&conv, &FormatConverter::finished, &loop,
+        [&](bool good, const QString& m) { ok = good; msg = m; loop.quit(); });
+    auto started = conv.start(job);
+    if (!started) { stdErr() << started.error().message << "\n"; return 2; }
+    loop.exec();
+    if (!m_quiet) stdErr() << "\n";
+    if (!ok) { stdErr() << "Conversion failed: " << msg << "\n"; return 2; }
+    stdOut() << QCoreApplication::translate("CLI", "Converted → %1").arg(job.output) << "\n";
     return 0;
 }
 
-// Stubs — to be filled by Claude Code
-int CLIController::cmdReplaygain(const QStringList& args)  { Q_UNUSED(args); stdErr() << "TODO: replaygain\n"; return 0; }
-int CLIController::cmdFingerprint(const QStringList& args) { Q_UNUSED(args); stdErr() << "TODO: fingerprint\n"; return 0; }
-int CLIController::cmdConvert(const QStringList& args)     { Q_UNUSED(args); stdErr() << "TODO: convert\n"; return 0; }
-int CLIController::cmdDuplicates(const QStringList& args)  { Q_UNUSED(args); stdErr() << "TODO: duplicates\n"; return 0; }
-int CLIController::cmdPlaylist(const QStringList& args)    { Q_UNUSED(args); stdErr() << "TODO: playlist\n"; return 0; }
-int CLIController::cmdRemote(const QStringList& args)      { Q_UNUSED(args); stdErr() << "TODO: remote\n"; return 0; }
-int CLIController::cmdServe(const QStringList& args)       { Q_UNUSED(args); stdErr() << "TODO: serve\n"; return 0; }
-int CLIController::cmdDaemon(const QStringList& args)      { Q_UNUSED(args); stdErr() << "TODO: daemon\n"; return 0; }
-int CLIController::cmdScrobble(const QStringList& args)    { Q_UNUSED(args); stdErr() << "TODO: scrobble\n"; return 0; }
-int CLIController::cmdPlugin(const QStringList& args)      { Q_UNUSED(args); stdErr() << "TODO: plugin\n"; return 0; }
-int CLIController::cmdStats(const QStringList& args)       { Q_UNUSED(args); stdErr() << "TODO: stats\n"; return 0; }
-int CLIController::cmdExport(const QStringList& args)      { Q_UNUSED(args); stdErr() << "TODO: export\n"; return 0; }
-int CLIController::cmdDb(const QStringList& args)          { Q_UNUSED(args); stdErr() << "TODO: db\n"; return 0; }
+int CLIController::cmdDuplicates(const QStringList& args) {
+    const QString sub = args.value(0, QStringLiteral("scan"));
+    if (sub != "scan") {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Usage: duplicates scan   (resolution is interactive — use the GUI)") << "\n";
+        return 1;
+    }
+    if (!db()) return 2;
+    DuplicateDetector det;
+    auto r = det.findDuplicates();
+    if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+    const auto groups = r.value();
+    if (groups.isEmpty()) {
+        stdOut() << QCoreApplication::translate("CLI", "No duplicates found.") << "\n";
+        return 0;
+    }
+    int n = 0;
+    for (const auto& g : groups) {
+        stdOut() << QCoreApplication::translate("CLI", "Group %1 (%2 tracks):")
+                    .arg(++n).arg(g.tracks.size()) << "\n";
+        for (const auto& t : g.tracks)
+            stdOut() << "  [" << t.id << "] " << t.filepath << "\n";
+    }
+    stdOut() << QCoreApplication::translate("CLI", "%1 duplicate group(s).").arg(groups.size()) << "\n";
+    return 0;
+}
+
+int CLIController::cmdPlaylist(const QStringList& args) {
+    const QString sub = args.value(0);
+    if (!db()) return 2;
+    PlaylistManager pm;
+
+    if (sub.isEmpty() || sub == "list") {
+        auto r = pm.list();
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        for (const auto& pl : r.value())
+            stdOut() << QString("[%1] %2%3\n").arg(pl.id).arg(pl.name,
+                        pl.smart ? QStringLiteral(" (smart)") : QString());
+        return 0;
+    }
+    if (sub == "create") {
+        if (args.size() < 2) { stdErr() << "Usage: playlist create <name>\n"; return 1; }
+        auto r = pm.create(args.mid(1).join(' '));
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Created playlist [%1]").arg(r.value()) << "\n";
+        return 0;
+    }
+    if (sub == "export") {
+        if (args.size() < 3) { stdErr() << "Usage: playlist export <id> <file.m3u|.pls|.xspf>\n"; return 1; }
+        auto tr = pm.tracksOf(args[1].toInt());
+        if (!tr) { stdErr() << tr.error().message << "\n"; return 2; }
+        PlaylistExporter exp;
+        auto r = exp.exportToFile(args[2], tr.value());
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Exported %1 track(s) → %2")
+                    .arg(tr.value().size()).arg(args[2]) << "\n";
+        return 0;
+    }
+    if (sub == "import") {
+        if (args.size() < 3) { stdErr() << "Usage: playlist import <file> <name>\n"; return 1; }
+        PlaylistImporter imp;
+        auto entries = imp.importFile(args[1]);
+        if (!entries) { stdErr() << entries.error().message << "\n"; return 2; }
+        auto* d = db();
+        auto created = pm.create(args.mid(2).join(' '));
+        if (!created) { stdErr() << created.error().message << "\n"; return 2; }
+        int matched = 0;
+        for (const auto& e : entries.value()) {
+            auto t = d->getTrackByPath(e.path);
+            if (t) { pm.appendTrack(created.value(), t.value().id); ++matched; }
+        }
+        stdOut() << QCoreApplication::translate("CLI",
+            "Imported playlist [%1]: %2/%3 track(s) matched in library")
+            .arg(created.value()).arg(matched).arg(entries.value().size()) << "\n";
+        return 0;
+    }
+    stdErr() << "Usage: playlist list|create|export|import\n";
+    return 1;
+}
+
+int CLIController::cmdRemote(const QStringList& args) {
+    Q_UNUSED(args);
+    stdErr() << QCoreApplication::translate("CLI",
+        "remote talks to a SoundShelf server over HTTP. Configure the server URL and "
+        "bearer token first (see 'soundshelf serve'); remote control is exposed via the "
+        "REST API and the GUI's remote-library panel.") << "\n";
+    return 1;
+}
+
+int CLIController::cmdServe(const QStringList& args) {
+    if (!HttpServer::isAvailable()) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Built without QHttpServer (needs Qt 6.4+ HttpServer module).") << "\n";
+        return 1;
+    }
+    auto* d = db();
+    if (!d) return 2;
+
+    quint16 port = 8080;
+    QHostAddress bind = QHostAddress::AnyIPv4;
+    QString token;
+    for (int i = 0; i < args.size(); ++i) {
+        if (args[i] == "--port" && i + 1 < args.size())  port = args[++i].toUShort();
+        else if (args[i] == "--bind" && i + 1 < args.size()) bind = QHostAddress(args[++i]);
+        else if (args[i] == "--auth" && i + 1 < args.size()) token = args[++i];
+    }
+    if (token.isEmpty()) {
+        auto stored = d->getSetting(QStringLiteral("server.bearer_token"));
+        token = (stored && !stored.value().isEmpty())
+            ? stored.value()
+            : QUuid::createUuid().toString(QUuid::WithoutBraces);
+        d->setSetting(QStringLiteral("server.bearer_token"), token);
+    }
+
+    HttpServer server;
+    server.setBearerToken(token);
+    auto r = server.start(bind, port);
+    if (!r) { stdErr() << "Cannot start HTTP server: " << r.error().message << "\n"; return 2; }
+    stdOut() << QCoreApplication::translate("CLI", "Serving on %1:%2 — bearer token: %3")
+                .arg(bind.toString()).arg(port).arg(token) << "\n";
+    QEventLoop loop;   // run until terminated
+    loop.exec();
+    return 0;
+}
+
+int CLIController::cmdDaemon(const QStringList& args) {
+    const QString sub = args.value(0);
+    if (sub == "start")
+        stdErr() << QCoreApplication::translate("CLI",
+            "Run 'soundshelf serve' (optionally under systemd/Task Scheduler) to daemonise.") << "\n";
+    else
+        stdErr() << QCoreApplication::translate("CLI",
+            "daemon start|stop|status — process supervision is delegated to the OS "
+            "(systemd on Linux, Task Scheduler on Windows).") << "\n";
+    return 1;
+}
+
+int CLIController::cmdScrobble(const QStringList& args) {
+    const QString sub = args.value(0, QStringLiteral("status"));
+    if (!db()) return 2;
+    Scrobbler sc;
+    if (sub == "status") {
+        auto r = sc.pendingRows(1000);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Pending scrobbles: %1").arg(r.value().size()) << "\n";
+        for (const auto& row : r.value())
+            stdOut() << "  #" << row.id << " track=" << row.trackId << " via " << row.service << "\n";
+        return 0;
+    }
+    if (sub == "flush") {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Flushing requires authenticated Last.fm/ListenBrainz sessions and runs from the "
+            "GUI/daemon drainer. Use 'scrobble auth' there first.") << "\n";
+        return 1;
+    }
+    if (sub == "auth") {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Authentication uses a browser-based OAuth flow — run it from the GUI.") << "\n";
+        return 1;
+    }
+    stdErr() << "Usage: scrobble status|flush|auth\n";
+    return 1;
+}
+
+int CLIController::cmdPlugin(const QStringList& args) {
+    const QString sub = args.value(0, QStringLiteral("list"));
+    if (sub != "list") {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Usage: plugin list   (install/enable/disable are managed in the GUI)") << "\n";
+        return 1;
+    }
+    PluginManager pm;
+    pm.scan();
+    const auto plugins = pm.plugins();
+    if (plugins.isEmpty()) {
+        stdOut() << QCoreApplication::translate("CLI", "No visualization plugins found.") << "\n";
+        stdOut() << QCoreApplication::translate("CLI", "Search paths:") << "\n";
+        for (const auto& p : PluginManager::defaultPluginPaths())
+            stdOut() << "  " << p << "\n";
+        return 0;
+    }
+    stdOut() << QCoreApplication::translate("CLI", "%1 plugin(s) found.").arg(plugins.size()) << "\n";
+    return 0;
+}
+
+int CLIController::cmdStats(const QStringList& args) {
+    const QString sub = args.value(0, QStringLiteral("top-tracks"));
+    if (!db()) return 2;
+    PlayHistory hist;
+    if (sub == "top-tracks") {
+        auto r = hist.topTracks(25);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        for (const auto& a : r.value())
+            stdOut() << QString("%1×  %2\n").arg(a.playCount, 4).arg(a.label);
+        return 0;
+    }
+    if (sub == "listening-time") {
+        auto r = hist.totalPlayedMs();
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        const qint64 sec = r.value() / 1000;
+        stdOut() << QCoreApplication::translate("CLI", "Total listening time: %1h %2m")
+                    .arg(sec / 3600).arg((sec % 3600) / 60) << "\n";
+        return 0;
+    }
+    if (sub == "heatmap") {
+        auto r = hist.playsPerWeekday(365);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        static const char* days[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+        const auto v = r.value();
+        for (int i = 0; i < v.size() && i < 7; ++i)
+            stdOut() << days[i] << "  " << QString(v[i], QChar('#')) << " " << v[i] << "\n";
+        return 0;
+    }
+    stdErr() << "Usage: stats top-tracks|listening-time|heatmap\n";
+    return 1;
+}
+
+int CLIController::cmdExport(const QStringList& args) {
+    const int oi = args.indexOf(QStringLiteral("--out"));
+    // Output format comes from the global --format flag (json|table|csv);
+    // "table" has no file meaning here, so it falls back to json.
+    const QString fmt = (m_format == QLatin1String("csv")) ? QStringLiteral("csv")
+                                                           : QStringLiteral("json");
+    auto* d = db();
+    if (!d) return 2;
+    auto r = d->listTracks(1000000);
+    if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+    const auto tracks = r.value();
+
+    QString out;
+    if (fmt == "json") {
+        QJsonArray arr;
+        for (const auto& t : tracks)
+            arr.append(QJsonObject{
+                {"id", t.id}, {"title", t.title}, {"artist", t.artist},
+                {"album", t.album}, {"genre", t.genre}, {"year", t.year},
+                {"duration_ms", t.durationMs}, {"filepath", t.filepath}});
+        out = QString::fromUtf8(QJsonDocument(arr).toJson());
+    } else if (fmt == "csv") {
+        out = QStringLiteral("id,title,artist,album,genre,year,duration_ms,filepath\n");
+        auto esc = [](QString s){ s.replace('"', QStringLiteral("\"\"")); return '"' + s + '"'; };
+        for (const auto& t : tracks)
+            out += QString("%1,%2,%3,%4,%5,%6,%7,%8\n")
+                .arg(t.id).arg(esc(t.title), esc(t.artist), esc(t.album), esc(t.genre))
+                .arg(t.year).arg(t.durationMs).arg(esc(t.filepath));
+    } else {
+        stdErr() << "Unknown export format: " << fmt << " (use json|csv)\n";
+        return 1;
+    }
+
+    if (oi >= 0 && oi + 1 < args.size()) {
+        QFile f(args[oi + 1]);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            stdErr() << "Cannot write: " << args[oi + 1] << "\n"; return 2;
+        }
+        f.write(out.toUtf8());
+        stdOut() << QCoreApplication::translate("CLI", "Exported %1 track(s) → %2")
+                    .arg(tracks.size()).arg(args[oi + 1]) << "\n";
+    } else {
+        stdOut() << out;
+    }
+    return 0;
+}
+
+int CLIController::cmdDb(const QStringList& args) {
+    const QString sub = args.value(0);
+    auto* d = db();
+    if (!d) return 2;
+    if (sub == "migrate") {
+        auto db = d->database();
+        SchemaMigrator mig(db);
+        auto r = mig.migrate();
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Schema at version %1").arg(mig.currentVersion()) << "\n";
+        return 0;
+    }
+    if (sub == "vacuum") {
+        QSqlQuery q(d->database());
+        if (!q.exec(QStringLiteral("VACUUM"))) {
+            stdErr() << q.lastError().text() << "\n"; return 2;
+        }
+        stdOut() << QCoreApplication::translate("CLI", "Database vacuumed.") << "\n";
+        return 0;
+    }
+    if (sub == "info") {
+        auto db = d->database();
+        SchemaMigrator mig(db);
+        auto tracks = d->listTracks(1000000);
+        stdOut() << QCoreApplication::translate("CLI", "Schema version: %1").arg(mig.currentVersion()) << "\n";
+        stdOut() << QCoreApplication::translate("CLI", "Tracks: %1")
+                    .arg(tracks ? tracks.value().size() : 0) << "\n";
+        stdOut() << QCoreApplication::translate("CLI", "Path: %1").arg(d->database().databaseName()) << "\n";
+        return 0;
+    }
+    stdErr() << "Usage: db migrate|vacuum|info  (backup/restore: copy the .db file)\n";
+    return 1;
+}
 
 bool CLIController::tryDelegate(const QStringList& args) {
     Q_UNUSED(args);
