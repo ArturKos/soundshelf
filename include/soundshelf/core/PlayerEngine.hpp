@@ -8,6 +8,8 @@
 
 namespace soundshelf {
 
+class Crossfader;
+
 /// Stan playera.
 enum class PlayerState {
     Stopped,
@@ -67,6 +69,8 @@ public:
     void setEqualizerPreset(const QString& presetName);
     bool equalizerEnabled() const { return m_eqEnabled; }
     QVector<double> equalizerGains() const { return m_eqGains; }
+    /// Names (file stems) of the bundled EQ presets, e.g. "rock", "jazz".
+    static QStringList availablePresets();
 
     // Gapless / crossfade
     void setGaplessEnabled(bool enabled);
@@ -81,6 +85,18 @@ public:
     // Spectrum data — returns last-captured PCM converted to log-bin levels.
     /// Returns N float values in 0..1 range, one per visualization bar.
     QVector<float> spectrumData(int bars = 24) const;
+
+    /// Feeds a mono PCM frame (−1..1) for the visualizer to analyse. Normally
+    /// driven by the audio tap; exposed so the spectrum is testable/usable
+    /// independently of the playback pipeline.
+    void pushVisualizationPcm(const QVector<float>& monoPcm);
+
+    /// Pure FFT helper: Hann-windowed magnitude spectrum of @p monoPcm folded
+    /// into @p bars logarithmically spaced bands (≈20 Hz–20 kHz), each 0..1.
+    /// Returns all-zero bars when FFTW3 is not compiled in.
+    static QVector<float> computeSpectrum(const QVector<float>& monoPcm,
+                                          int bars,
+                                          int sampleRate = 44100);
 
 signals:
     void stateChanged(PlayerState state);
@@ -107,6 +123,8 @@ private:
     QVector<double> m_eqGains;
     bool m_gapless = true;
     int m_crossfadeMs = 0;
+    Crossfader* m_crossfader = nullptr;   ///< lazily created; parented to this
+    QVector<float> m_visPcm;          ///< last PCM frame for the visualizer
     RepeatMode m_repeat = RepeatMode::Off;
     bool m_shuffle = false;
 

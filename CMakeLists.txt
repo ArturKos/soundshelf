@@ -131,18 +131,14 @@ if(SOUNDSHELF_USE_VCPKG)
     endif()
 
     if(SOUNDSHELF_ENABLE_FFTW3)
-        find_package(FFTW3 CONFIG QUIET)
-        if(FFTW3_FOUND)
-            if(TARGET FFTW3::fftw3f)
-                set(SS_FFTW3_TARGET FFTW3::fftw3f)
-            elseif(TARGET FFTW3::fftw3)
-                set(SS_FFTW3_TARGET FFTW3::fftw3)
-            else()
-                message(STATUS "FFTW3 package found but no usable target, spectrum disabled")
-                set(SOUNDSHELF_ENABLE_FFTW3 OFF)
-            endif()
+        # The spectrum analyser uses the single-precision API (fftwf_*). vcpkg
+        # ships single precision as its own config package named "FFTW3f"
+        # (separate from the double-precision "FFTW3"), exporting FFTW3::fftw3f.
+        find_package(FFTW3f CONFIG QUIET)
+        if(FFTW3f_FOUND AND TARGET FFTW3::fftw3f)
+            set(SS_FFTW3_TARGET FFTW3::fftw3f)
         else()
-            message(STATUS "FFTW3 not found via vcpkg, spectrum will use Qt fallback")
+            message(STATUS "FFTW3 (single-precision) not found via vcpkg, spectrum disabled")
             set(SOUNDSHELF_ENABLE_FFTW3 OFF)
         endif()
     endif()
@@ -385,6 +381,10 @@ qt_add_resources(soundshelf_lib "soundshelf_resources"
         resources/eq_presets/classical.json
         resources/eq_presets/rock.json
         resources/eq_presets/flat.json
+        resources/eq_presets/jazz.json
+        resources/eq_presets/bass_boost.json
+        resources/eq_presets/treble_boost.json
+        resources/eq_presets/vocal.json
 )
 
 qt_add_resources(soundshelf_lib "soundshelf_translations"

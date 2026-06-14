@@ -1,12 +1,24 @@
 #include "soundshelf/core/PlayerEngine.hpp"
+#include "soundshelf/core/Crossfader.hpp"
 
 #include <QDateTime>
 #include <QStringList>
 #include <QTimer>
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 #include <QLoggingCategory>
 
 #include <clocale>
+#include <cmath>
 #include <mpv/client.h>
+
+#ifdef SOUNDSHELF_HAVE_FFTW3
+#  include <fftw3.h>
+#endif
 
 Q_LOGGING_CATEGORY(lcPlayer, "soundshelf.player")
 
@@ -260,8 +272,35 @@ void PlayerEngine::setEqualizerBand(int band, double gainDb) {
 }
 
 void PlayerEngine::setEqualizerPreset(const QString& name) {
-    // Presety zdefiniowane w resources/eq_presets/*.json — TODO: ładowanie
-    Q_UNUSED(name);
+    // Preset name maps to a bundled resource stem: "Bass Boost" → bass_boost.
+    QString stem = name.trimmed().toLower();
+    stem.replace(QChar(' '), QChar('_'));
+    QFile f(QStringLiteral(":/resources/eq_presets/%1.json").arg(stem));
+    if (!f.open(QIODevice::ReadOnly)) {
+        qCWarning(lcPlayer) << "EQ preset not found:" << stem;
+        return;
+    }
+    const auto gains = QJsonDocument::fromJson(f.readAll())
+                           .object().value(QStringLiteral("gains_db")).toArray();
+    if (gains.size() != EQ_BANDS) {
+        qCWarning(lcPlayer) << "EQ preset" << stem << "has" << gains.size()
+                            << "bands, expected" << EQ_BANDS;
+        return;
+    }
+    for (int i = 0; i < EQ_BANDS; ++i)
+        m_eqGains[i] = qBound(-12.0, gains[i].toDouble(), 12.0);
+    applyAudioFilters();
+    qCDebug(lcPlayer) << "Applied EQ preset" << stem;
+}
+
+QStringList PlayerEngine::availablePresets() {
+    QStringList out;
+    const auto entries = QDir(QStringLiteral(":/resources/eq_presets"))
+                             .entryList(QStringList{QStringLiteral("*.json")}, QDir::Files);
+    for (const auto& fn : entries)
+        out << QFileInfo(fn).completeBaseName();
+    out.sort();
+    return out;
 }
 
 void PlayerEngine::setGaplessEnabled(bool enabled) {
@@ -272,8 +311,17 @@ void PlayerEngine::setGaplessEnabled(bool enabled) {
 }
 
 void PlayerEngine::setCrossfadeMs(int ms) {
+    ms = qMax(0, ms);
+    if (m_crossfadeMs == ms) return;   // also breaks the Crossfader callback loop
     m_crossfadeMs = ms;
-    // Implementacja crossfade wymaga drugiej instancji mpv — TODO
+    // The Crossfader hooks our position/duration/track signals and drives an
+    // equal-power volume fade-out near end-of-track (gapless then starts the
+    // next track). True simultaneous overlap would need a second mpv handle —
+    // documented as future work.
+    if (ms > 0 && !m_crossfader) {
+        m_crossfader = new Crossfader(this, this);
+    }
+    if (m_crossfader) m_crossfader->setFadeMs(ms);
 }
 
 void PlayerEngine::setRepeat(RepeatMode mode) {
@@ -318,10 +366,64 @@ void PlayerEngine::applyAudioFilters() {
     }
 }
 
+void PlayerEngine::pushVisualizationPcm(const QVector<float>& monoPcm) {
+    m_visPcm = monoPcm;
+    emit audioBufferReady(monoPcm);
+}
+
 QVector<float> PlayerEngine::spectrumData(int bars) const {
-    // TODO: prawdziwy FFT z PCM tap. Na razie placeholder z deklarowanych wartości.
+    return computeSpectrum(m_visPcm, bars);
+}
+
+QVector<float> PlayerEngine::computeSpectrum(const QVector<float>& monoPcm,
+                                             int bars, int sampleRate) {
+    if (bars <= 0) return {};
     QVector<float> out(bars, 0.0f);
+#ifndef SOUNDSHELF_HAVE_FFTW3
+    Q_UNUSED(monoPcm); Q_UNUSED(sampleRate);
+    return out;   // fallback: silence
+#else
+    // Use a power-of-two window so the FFT is efficient; pad/truncate input.
+    int n = 1;
+    while (n < monoPcm.size() && n < 8192) n <<= 1;
+    if (n < 256 || monoPcm.isEmpty()) return out;
+
+    std::vector<float> in(n, 0.0f);
+    const int copy = std::min(n, int(monoPcm.size()));
+    for (int i = 0; i < copy; ++i) {
+        // Hann window reduces spectral leakage.
+        const float w = 0.5f * (1.0f - std::cos(2.0f * float(M_PI) * i / (n - 1)));
+        in[i] = monoPcm[i] * w;
+    }
+
+    const int bins = n / 2 + 1;
+    auto* spec = static_cast<fftwf_complex*>(fftwf_malloc(sizeof(fftwf_complex) * bins));
+    fftwf_plan plan = fftwf_plan_dft_r2c_1d(n, in.data(), spec, FFTW_ESTIMATE);
+    fftwf_execute(plan);
+
+    // Fold linear FFT bins into `bars` logarithmically spaced bands over
+    // ~20 Hz .. Nyquist, taking the peak magnitude per band (dB → 0..1).
+    const double fMin = 20.0, fMax = sampleRate / 2.0;
+    const double binHz = double(sampleRate) / n;
+    for (int b = 0; b < bars; ++b) {
+        const double lo = fMin * std::pow(fMax / fMin, double(b) / bars);
+        const double hi = fMin * std::pow(fMax / fMin, double(b + 1) / bars);
+        int k0 = std::max(1, int(lo / binHz));
+        int k1 = std::min(bins - 1, std::max(k0, int(hi / binHz)));
+        double peak = 0.0;
+        for (int k = k0; k <= k1; ++k) {
+            const double mag = std::hypot(spec[k][0], spec[k][1]) / (n / 2.0);
+            peak = std::max(peak, mag);
+        }
+        // Map magnitude to 0..1 on a dB scale (-60 dB floor → 0, 0 dB → 1).
+        const double db = 20.0 * std::log10(peak + 1e-9);
+        out[b] = float(qBound(0.0, (db + 60.0) / 60.0, 1.0));
+    }
+
+    fftwf_destroy_plan(plan);
+    fftwf_free(spec);
     return out;
+#endif
 }
 
 } // namespace soundshelf
