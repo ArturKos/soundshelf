@@ -228,6 +228,7 @@ set(SS_IO_SOURCES
     src/io/CueParser.cpp
     src/io/DiscRipper.cpp
     src/io/FormatConverter.cpp
+    src/io/PcmDecoder.cpp
     src/io/PlaylistImporter.cpp
     src/io/PlaylistExporter.cpp
 )
