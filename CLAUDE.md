@@ -328,7 +328,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | TagInfo (TagLib wrapper) | **działa** (read+write, encoding fallback) |
 | DiscReader — `FolderReader` | **działa** |
 | DiscReader — `CDDAReader` | **działa** — libcdio/paranoia + discid, WAV out (kompilowane pod `SOUNDSHELF_HAVE_LIBCDIO`) |
-| DiscReader — `ImageReader` / `CueParser` | `CueParser` **działa** (z testem); `ImageReader` częściowy |
+| DiscReader — `ImageReader` / `CueParser` | **działa** — `CueParser` supports single & multi-file sheets (z testem); `ImageReader` resolves all files, probes durations (z testem) |
 | `DiscRipper` | **działa** (rip + tag) |
 | PcmDecoder (ffmpeg → s16le) | **działa** — wspólne źródło PCM dla RG/AcoustID/spektrum (z testem) |
 | ReplayGainAnalyzer | **działa** — EBU R128 przez libebur128 (track+album), zapis tagów, `db updateReplayGain`; wynik zgodny z ffmpeg ebur128 (z testem) |
@@ -349,7 +349,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve). `next/prev/daemon/remote` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 15 plików (cue, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, **pcm_decoder, replaygain, fingerprint, eq_presets, spectrum**) |
+| Testy | 15 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, **pcm_decoder, replaygain, fingerprint, eq_presets, spectrum**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
@@ -357,7 +357,6 @@ Global hotkeys (system-wide, można wyłączyć):
 - CLI: IPC (D-Bus/named pipe) do działającego GUI dla `next/prev/daemon/remote`
 - AcoustID: konfiguracja klucza API (`acoustid.api_key`) w Preferencjach
 - Tłumaczenia: uzupełnić `.ts` poza seedem
-- ImageReader (obrazy CUE/BIN): dokończyć
 
 Integracja z bibliotekami systemowymi: `qt6 libmpv taglib libcdio chromaprint libebur128 fftw3 ffmpeg`.
 
