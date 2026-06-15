@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QMap>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcImage, "soundshelf.io.image")
@@ -62,8 +63,51 @@ Result<Toc> ImageReader::readToc() {
     if (!sheetResult) return Result<Toc>::err(sheetResult.error().code, sheetResult.error().message);
     m_sheet = sheetResult.value();
 
-    // Resolve audio file path: FILE may be relative to the CUE.
     QFileInfo cueFi(m_cuePath);
+
+    if (m_sheet.isMultiFile()) {
+        // Resolve each distinct FILE referenced by the sheet (in track order).
+        QMap<QString, int> perFileDurationMs;
+        QStringList processed;  // ordered set of distinct file keys already handled
+
+        for (const auto& t : m_sheet.tracks) {
+            if (processed.contains(t.file)) continue;
+            processed.append(t.file);
+
+            QFileInfo audioFi(cueFi.absoluteDir(), t.file);
+            if (!audioFi.exists()) {
+                // Per-file companion extension fallback using each file's own basename.
+                QFileInfo afBase(t.file);
+                bool found = false;
+                for (const auto& ext : audioCompanionExts()) {
+                    QFileInfo candidate(cueFi.absoluteDir(),
+                        afBase.completeBaseName() + QLatin1Char('.') + ext);
+                    if (candidate.exists()) { audioFi = candidate; found = true; break; }
+                }
+                if (!found) {
+                    return Result<Toc>::err(Error::FileNotFound,
+                        QStringLiteral("Audio file '%1' missing next to %2")
+                            .arg(t.file, cueFi.fileName()));
+                }
+            }
+
+            m_audioPaths.append(audioFi.absoluteFilePath());
+            int ms = 0;
+            if (auto d = probeAudioDurationMs(audioFi.absoluteFilePath()); d) ms = d.value();
+            perFileDurationMs[t.file] = ms;
+        }
+
+        m_audioPath = m_audioPaths.isEmpty() ? QString() : m_audioPaths.first();
+
+        Toc toc = CueParser::tocFromSheet(m_sheet, perFileDurationMs);
+        qCInfo(lcImage) << "Multi-file image" << cueFi.fileName()
+                        << "→" << m_audioPaths.size() << "containers,"
+                        << toc.entries.size() << "tracks,"
+                        << toc.totalDurationMs << "ms total";
+        return Result<Toc>::ok(std::move(toc));
+    }
+
+    // Single-file path — unchanged behaviour.
     QFileInfo audioFi(cueFi.absoluteDir(), m_sheet.file);
     if (!audioFi.exists()) {
         // Fallback — search for any companion audio file with same basename.
@@ -79,6 +123,7 @@ Result<Toc> ImageReader::readToc() {
                 .arg(m_sheet.file, cueFi.fileName()));
     }
     m_audioPath = audioFi.absoluteFilePath();
+    m_audioPaths = { m_audioPath };
 
     int totalMs = 0;
     if (auto d = probeAudioDurationMs(m_audioPath); d) totalMs = d.value();

@@ -2,6 +2,7 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QMap>
 #include <QTextStream>
 #include <QRegularExpression>
 #include <QLoggingCategory>
@@ -87,6 +88,13 @@ Result<CueParser::CueSheet> CueParser::parseString(const QString& text, const QS
     CueTrack* current = nullptr;
     bool inTrackContext = false;
 
+    // Tracks the current FILE context across the parse loop.
+    QString currentFile;
+    QString currentFileType;
+    bool firstFileSeen = false;
+    // Ordered list of distinct FILE names (used to detect single-file vs multi-file).
+    QStringList distinctFiles;
+
     const QStringList lines = text.split(QRegularExpression(QStringLiteral("\\r\\n|\\n|\\r")));
     for (const QString& rawLine : lines) {
         const QString line = rawLine.trimmed();
@@ -97,8 +105,17 @@ Result<CueParser::CueSheet> CueParser::parseString(const QString& text, const QS
         const QString cmd = tok[0].toUpper();
 
         if (cmd == QLatin1String("FILE")) {
-            if (tok.size() >= 2) sheet.file = stripQuotes(tok[1]);
-            if (tok.size() >= 3) sheet.fileType = tok[2].toUpper();
+            if (tok.size() >= 2) currentFile = stripQuotes(tok[1]);
+            if (tok.size() >= 3) currentFileType = tok[2].toUpper();
+            else                 currentFileType.clear();
+            if (!firstFileSeen) {
+                sheet.file     = currentFile;
+                sheet.fileType = currentFileType;
+                firstFileSeen  = true;
+            }
+            if (!distinctFiles.contains(currentFile)) {
+                distinctFiles.append(currentFile);
+            }
         } else if (cmd == QLatin1String("TITLE")) {
             const QString val = tok.size() >= 2
                 ? stripQuotes(tok.mid(1).join(QLatin1Char(' ')))
@@ -117,6 +134,8 @@ Result<CueParser::CueSheet> CueParser::parseString(const QString& text, const QS
             if (tok.size() < 3) continue;
             CueTrack t;
             t.trackNumber = tok[1].toInt();
+            t.file        = currentFile;
+            t.fileType    = currentFileType;
             sheet.tracks.append(t);
             current = &sheet.tracks.last();
             inTrackContext = true;
@@ -151,8 +170,19 @@ Result<CueParser::CueSheet> CueParser::parseString(const QString& text, const QS
             QStringLiteral("CUE %1 has no TRACK entries").arg(label));
     }
 
+    // For single-file sheets leave CueTrack::file empty so callers can detect
+    // the layout from isMultiFile() and existing code is not surprised by a
+    // populated field it never set before.
+    if (distinctFiles.size() <= 1) {
+        for (auto& t : sheet.tracks) {
+            t.file.clear();
+            t.fileType.clear();
+        }
+    }
+
     qCDebug(lcCue) << "Parsed CUE" << label
                    << "tracks:" << sheet.tracks.size()
+                   << "files:" << distinctFiles.size()
                    << "file:" << sheet.file;
     return Result<CueSheet>::ok(std::move(sheet));
 }
@@ -177,6 +207,39 @@ Toc CueParser::tocFromSheet(const CueSheet& sheet, int totalAudioMs) {
             // Last track — caller must provide total audio length to compute end.
             endFrames = totalAudioMs > 0
                 ? (static_cast<long>(totalAudioMs) * 75 / 1000)
+                : e.startSector;
+        }
+        e.endSector = endFrames;
+        e.durationMs = framesToMs(endFrames - e.startSector);
+        toc.entries.append(e);
+        toc.totalDurationMs += e.durationMs;
+    }
+    return toc;
+}
+
+Toc CueParser::tocFromSheet(const CueSheet& sheet, const QMap<QString, int>& perFileDurationMs) {
+    Toc toc;
+    const int n = sheet.tracks.size();
+    for (int i = 0; i < n; ++i) {
+        const auto& t = sheet.tracks[i];
+        TocEntry e;
+        e.trackNumber = t.trackNumber > 0 ? t.trackNumber : i + 1;
+        e.startSector = t.indexOneFrames >= 0 ? t.indexOneFrames : 0;
+        e.title = t.title;
+
+        // A track ends at the next track's boundary if that track shares the same
+        // file; otherwise it runs to the end of its own file.
+        const bool lastInFile = (i + 1 >= n) || (sheet.tracks[i + 1].file != t.file);
+        long endFrames;
+        if (!lastInFile) {
+            const auto& next = sheet.tracks[i + 1];
+            endFrames = next.indexZeroFrames >= 0
+                ? next.indexZeroFrames
+                : (next.indexOneFrames >= 0 ? next.indexOneFrames : e.startSector);
+        } else {
+            const int fileDurMs = perFileDurationMs.value(t.file, 0);
+            endFrames = fileDurMs > 0
+                ? (static_cast<long>(fileDurMs) * 75 / 1000)
                 : e.startSector;
         }
         e.endSector = endFrames;
