@@ -9,9 +9,11 @@
 #include "soundshelf/core/Scrobbler.hpp"
 #include "soundshelf/core/ReplayGainAnalyzer.hpp"
 #include "soundshelf/core/ChromaprintEngine.hpp"
+#include "soundshelf/core/PodcastManager.hpp"
 #include "soundshelf/network/AcoustIDClient.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
 #include "soundshelf/data/PlayHistory.hpp"
+#include "soundshelf/data/PodcastStore.hpp"
 #include "soundshelf/data/SchemaMigrator.hpp"
 #include "soundshelf/io/TagInfo.hpp"
 #include "soundshelf/io/FormatConverter.hpp"
@@ -30,6 +32,7 @@
 #include <QEventLoop>
 #include <QFutureWatcher>
 #include <QHostAddress>
+#include <QStandardPaths>
 #include <QUuid>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -100,6 +103,16 @@ void printUsage() {
         "  convert <id|path> --to flac|mp3|ogg|opus\n"
         "  duplicates scan|resolve\n"
         "  playlist list|create|export|import\n"
+        "\n"
+        "Podcasts:\n"
+        "  podcast list                        List subscribed feeds\n"
+        "  podcast subscribe <url>             Subscribe to a podcast feed\n"
+        "  podcast refresh <id> | --all        Re-fetch feed(s) for new episodes\n"
+        "  podcast episodes <feedId>           List episodes for a feed\n"
+        "  podcast download <epId> [--dir DIR] Download episode audio file\n"
+        "  podcast played <epId> [--unset]     Mark episode played / unplayed\n"
+        "  podcast unsubscribe <feedId>        Remove feed and all its episodes\n"
+        "\n"
         "  remote list|add|sync|play|search\n"
         "  serve [--port 8080] [--bind 0.0.0.0] [--auth TOKEN]\n"
         "  daemon start|stop|status\n"
@@ -192,6 +205,7 @@ int CLIController::run(const QStringList& args) {
     else if (cmd == "convert")     return cmdConvert(sub);
     else if (cmd == "duplicates")  return cmdDuplicates(sub);
     else if (cmd == "playlist")    return cmdPlaylist(sub);
+    else if (cmd == "podcast")     return cmdPodcast(sub);
     else if (cmd == "remote")      return cmdRemote(sub);
     else if (cmd == "serve")       return cmdServe(sub);
     else if (cmd == "daemon")      return cmdDaemon(sub);
@@ -884,6 +898,221 @@ int CLIController::cmdPlaylist(const QStringList& args) {
         return 0;
     }
     stdErr() << "Usage: playlist list|create|export|import\n";
+    return 1;
+}
+
+void CLIController::setPodcastFetcherForTesting(PodcastManager::FeedFetcher fetcher) {
+    m_podcastFetcher = std::move(fetcher);
+}
+
+int CLIController::cmdPodcast(const QStringList& args) {
+    const QString sub = args.value(0);
+
+    if (sub.isEmpty()) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Usage: podcast list|subscribe|refresh|episodes|download|played|unsubscribe") << "\n";
+        return 1;
+    }
+
+    if (sub == "list") {
+        if (!db()) return 2;
+        PodcastStore store;
+        auto r = store.feeds();
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        if (m_format == QLatin1String("json")) {
+            QJsonArray arr;
+            for (const auto& f : r.value()) {
+                arr.append(QJsonObject{
+                    {QStringLiteral("id"),             f.id},
+                    {QStringLiteral("url"),            f.url},
+                    {QStringLiteral("title"),          f.title},
+                    {QStringLiteral("author"),         f.author},
+                    {QStringLiteral("language"),       f.language},
+                    {QStringLiteral("last_refreshed"), f.lastRefreshed.toString(Qt::ISODate)},
+                });
+            }
+            stdOut() << QJsonDocument(arr).toJson(QJsonDocument::Compact) << "\n";
+        } else {
+            stdOut() << QString("%1  %2  %3\n").arg("ID", -4).arg("Title", -40).arg("Author", -25);
+            for (const auto& f : r.value()) {
+                stdOut() << QString("%1  %2  %3\n")
+                    .arg(f.id, -4)
+                    .arg(f.title.left(40), -40)
+                    .arg(f.author.left(25), -25);
+            }
+        }
+        return 0;
+    }
+
+    if (sub == "subscribe") {
+        if (args.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: podcast subscribe <url>") << "\n";
+            return 1;
+        }
+        if (!db()) return 2;
+        PodcastManager mgr;
+        if (m_podcastFetcher) {
+            mgr.setFeedFetcher(m_podcastFetcher);
+            mgr.setEnclosureFetcher(m_podcastFetcher);
+        }
+        auto r = mgr.subscribe(args[1]);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Subscribed feed [%1]").arg(r.value()) << "\n";
+        return 0;
+    }
+
+    if (sub == "refresh") {
+        if (!db()) return 2;
+        PodcastManager mgr;
+        if (m_podcastFetcher) {
+            mgr.setFeedFetcher(m_podcastFetcher);
+            mgr.setEnclosureFetcher(m_podcastFetcher);
+        }
+        if (args.contains(QStringLiteral("--all"))) {
+            auto r = mgr.refreshAll();
+            if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+            stdOut() << QCoreApplication::translate("CLI",
+                "Refreshed all feeds: %1 new episode(s)").arg(r.value()) << "\n";
+            return 0;
+        }
+        if (args.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: podcast refresh <id> | --all") << "\n";
+            return 1;
+        }
+        bool ok;
+        const int feedId = args[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid feed id: %1").arg(args[1]) << "\n";
+            return 1;
+        }
+        auto r = mgr.refreshFeed(feedId);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI",
+            "Feed [%1] refreshed: %2 new episode(s)").arg(feedId).arg(r.value()) << "\n";
+        return 0;
+    }
+
+    if (sub == "episodes") {
+        if (args.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: podcast episodes <feedId>") << "\n";
+            return 1;
+        }
+        if (!db()) return 2;
+        bool ok;
+        const int feedId = args[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid feed id: %1").arg(args[1]) << "\n";
+            return 1;
+        }
+        PodcastStore store;
+        auto r = store.episodesForFeed(feedId);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        if (m_format == QLatin1String("json")) {
+            QJsonArray arr;
+            for (const auto& ep : r.value()) {
+                QJsonObject o{
+                    {QStringLiteral("id"),             ep.id},
+                    {QStringLiteral("feed_id"),        ep.feedId},
+                    {QStringLiteral("title"),          ep.title},
+                    {QStringLiteral("episode_number"), ep.episodeNumber},
+                    {QStringLiteral("duration_s"),     ep.durationMs / 1000},
+                    {QStringLiteral("played"),         ep.isPlayed},
+                };
+                if (!ep.localPath.isEmpty())
+                    o[QStringLiteral("local_path")] = ep.localPath;
+                arr.append(o);
+            }
+            stdOut() << QJsonDocument(arr).toJson(QJsonDocument::Compact) << "\n";
+        } else {
+            stdOut() << QString("%1  %2  %3  %4  %5\n")
+                .arg("#",  -4).arg("Title", -45).arg("Dur(s)", -7).arg("Pl", -3).arg("Local");
+            for (const auto& ep : r.value()) {
+                stdOut() << QString("%1  %2  %3  %4  %5\n")
+                    .arg(ep.episodeNumber, -4)
+                    .arg(ep.title.left(45), -45)
+                    .arg(ep.durationMs / 1000, -7)
+                    .arg(ep.isPlayed ? 'Y' : 'N')
+                    .arg(ep.localPath.isEmpty() ? QStringLiteral("-") : ep.localPath);
+            }
+        }
+        return 0;
+    }
+
+    if (sub == "download") {
+        if (args.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: podcast download <episodeId> [--dir PATH]") << "\n";
+            return 1;
+        }
+        if (!db()) return 2;
+        bool ok;
+        const int episodeId = args[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid episode id: %1").arg(args[1]) << "\n";
+            return 1;
+        }
+        const int di = args.indexOf(QStringLiteral("--dir"));
+        const QString dir = (di >= 0 && di + 1 < args.size())
+            ? args[di + 1]
+            : QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+              + QStringLiteral("/Podcasts");
+        QDir().mkpath(dir);
+        PodcastManager mgr;
+        if (m_podcastFetcher) {
+            mgr.setFeedFetcher(m_podcastFetcher);
+            mgr.setEnclosureFetcher(m_podcastFetcher);
+        }
+        auto r = mgr.downloadEpisode(episodeId, dir);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Downloaded → %1").arg(r.value()) << "\n";
+        return 0;
+    }
+
+    if (sub == "played") {
+        if (args.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: podcast played <episodeId> [--unset]") << "\n";
+            return 1;
+        }
+        if (!db()) return 2;
+        bool ok;
+        const int episodeId = args[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid episode id: %1").arg(args[1]) << "\n";
+            return 1;
+        }
+        const bool unset = args.contains(QStringLiteral("--unset"));
+        PodcastStore store;
+        auto r = store.setPlayed(episodeId, !unset);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Episode [%1] marked as %2")
+            .arg(episodeId)
+            .arg(unset
+                ? QCoreApplication::translate("CLI", "unplayed")
+                : QCoreApplication::translate("CLI", "played")) << "\n";
+        return 0;
+    }
+
+    if (sub == "unsubscribe") {
+        if (args.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: podcast unsubscribe <feedId>") << "\n";
+            return 1;
+        }
+        if (!db()) return 2;
+        bool ok;
+        const int feedId = args[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid feed id: %1").arg(args[1]) << "\n";
+            return 1;
+        }
+        PodcastStore store;
+        auto r = store.unsubscribe(feedId);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        stdOut() << QCoreApplication::translate("CLI", "Unsubscribed feed [%1]").arg(feedId) << "\n";
+        return 0;
+    }
+
+    stdErr() << QCoreApplication::translate("CLI",
+        "Unknown podcast subcommand: %1. "
+        "Use list|subscribe|refresh|episodes|download|played|unsubscribe.").arg(sub) << "\n";
     return 1;
 }
 
