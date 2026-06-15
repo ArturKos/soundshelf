@@ -1,4 +1,5 @@
 #include "soundshelf/network/AccurateRipClient.hpp"
+#include "soundshelf/network/AccurateRip.hpp"
 
 #include <QUrl>
 
@@ -27,6 +28,11 @@ AccurateRipClient::lookup(int trackCount, quint32 ar1, quint32 ar2, quint32 free
     const QString path = QStringLiteral("/accuraterip/%1/%2/%3/%4")
         .arg(f, g, h, filename);
     return m_rest.getBytes(kBase, path);
+}
+
+QFuture<Result<QByteArray>> AccurateRipClient::lookup(const Toc& toc) {
+    const accuraterip::DiscIds ids = accuraterip::computeDiscIds(toc);
+    return lookup(ids.trackCount, ids.id1, ids.id2, ids.freedbId);
 }
 
 } // namespace soundshelf

@@ -5,6 +5,7 @@
 #include <QFuture>
 #include <QByteArray>
 #include "soundshelf/network/RestClient.hpp"
+#include "soundshelf/network/AccurateRip.hpp"
 
 namespace soundshelf {
 
@@ -19,7 +20,7 @@ namespace soundshelf {
  * where `<f><g><h>` are the first three hex chars of the disc id.
  *
  * The class only fetches the binary blob; parsing it into per-track
- * CRC pairs is done by the caller.
+ * CRC pairs is done by accuraterip::parseResponse().
  */
 class AccurateRipClient : public QObject {
     Q_OBJECT
@@ -28,13 +29,24 @@ public:
     ~AccurateRipClient() override;
 
     /// @param trackCount  number of audio tracks on the disc
-    /// @param ar1         AccurateRip "ID1" (CRC of leadouts)
-    /// @param ar2         AccurateRip "ID2" (CRC of offsets)
+    /// @param ar1         AccurateRip ID1 (sum of sector offsets)
+    /// @param ar2         AccurateRip ID2 (weighted sum)
     /// @param freedbId    classic FreeDB id (8-hex-char int)
     QFuture<Result<QByteArray>> lookup(int trackCount,
                                        quint32 ar1,
                                        quint32 ar2,
                                        quint32 freedbId);
+
+    /**
+     * @brief Convenience overload that derives disc IDs from a TOC.
+     *
+     * Calls accuraterip::computeDiscIds() then forwards to the four-argument
+     * overload.  Returns the raw dBAR binary blob for subsequent parsing with
+     * accuraterip::parseResponse().
+     *
+     * @param toc  Table of contents from CDDAReader or CueParser.
+     */
+    QFuture<Result<QByteArray>> lookup(const Toc& toc);
 
 private:
     RestClient m_rest;

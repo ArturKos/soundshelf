@@ -78,8 +78,12 @@ TOKEN_RETRY_MAX = 1800
 LIMIT_MARKERS = [
     "usage limit", "rate limit", "limit reached", "exceeded your usage",
     "/upgrade", "overloaded_error", "rate_limit_error",
-    "too many requests", "resets at", "credit balance",
+    "too many requests", "credit balance",
+    "session limit", "hit your", "you've hit", "resets",
 ]
+
+# api_error_status values that mean "wait and retry" (rate / overloaded).
+LIMIT_HTTP_STATUS = {429, 529}
 
 PIPELINE_START = "architect"
 
@@ -167,14 +171,27 @@ def looks_like_limit(blob: str) -> bool:
 
 def extract_reset_epoch(blob: str) -> int | None:
     """Best-effort parse of a reset time from a limit message."""
+    low = blob.lower()
     # Pattern: "...limit reached|1700000000" (Claude CLI style epoch).
-    m = re.search(r"limit reached\|(\d{10})", blob)
+    m = re.search(r"(?:limit reached|reset[^\d]{0,20})\|?(\d{10})", low)
     if m:
         return int(m.group(1))
-    # Bare 10-digit epoch near 'reset'.
-    m = re.search(r"reset[^\d]{0,20}(\d{10})", blob.lower())
+    # Natural-language clock time, e.g. "resets 2am", "resets at 10:30pm".
+    m = re.search(r"resets?\s*(?:at\s*)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", low)
     if m:
-        return int(m.group(1))
+        hour = int(m.group(1))
+        minute = int(m.group(2) or 0)
+        ampm = m.group(3)
+        if ampm == "pm" and hour != 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        if 0 <= hour <= 23:
+            now = dt.datetime.now()
+            target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if target <= now:                  # the time already passed today → tomorrow
+                target += dt.timedelta(days=1)
+            return int(target.timestamp())
     return None
 
 
@@ -238,15 +255,20 @@ def run_agent(role: str, state: dict) -> dict:
 
     result_text = ""
     is_error = proc.returncode != 0
+    api_status = None
     try:
         data = json.loads(proc.stdout)
         result_text = data.get("result", "") or ""
         is_error = is_error or bool(data.get("is_error"))
+        api_status = data.get("api_error_status")
     except (json.JSONDecodeError, TypeError):
         result_text = proc.stdout or ""
 
     combined = raw + "\n" + result_text
-    if (is_error or proc.returncode != 0) and looks_like_limit(combined):
+    # A usage/session/rate limit: the HTTP status is the most reliable signal,
+    # with a text-marker fallback for messages the CLI surfaces without a code.
+    if api_status in LIMIT_HTTP_STATUS or \
+       ((is_error or proc.returncode != 0) and looks_like_limit(combined)):
         return {"ok": False, "verdict": None, "result": result_text,
                 "limit": True, "reset": extract_reset_epoch(combined)}
 

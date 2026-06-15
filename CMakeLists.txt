@@ -255,6 +255,7 @@ set(SS_NETWORK_SOURCES
     src/network/LyricsClient.cpp
     src/network/LastFmClient.cpp
     src/network/ListenBrainzClient.cpp
+    src/network/AccurateRip.cpp
     src/network/AccurateRipClient.cpp
     src/network/NetworkLibrary.cpp
     src/network/HttpServer.cpp
