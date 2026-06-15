@@ -119,6 +119,18 @@ public:
     Result<QList<Episode>> episodesForFeed(int feedId);
 
     /**
+     * @brief Returns a single episode by primary key.
+     *
+     * Added to support PodcastManager::downloadEpisode(), which must look up
+     * an episode by id without knowing its feed.
+     *
+     * @param episodeId  Primary key of the episode row.
+     * @return The episode on success, @c std::nullopt when no row exists, or
+     *         an Error on database failure.
+     */
+    Result<std::optional<Episode>> episode(int episodeId);
+
+    /**
      * @brief Updates the @c is_played flag for a single episode.
      *
      * @param episodeId  Primary key of the episode row.

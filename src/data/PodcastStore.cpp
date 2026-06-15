@@ -232,6 +232,22 @@ Result<QList<PodcastStore::Episode>> PodcastStore::episodesForFeed(int feedId) {
     return Result<QList<Episode>>::ok(std::move(rows));
 }
 
+Result<std::optional<PodcastStore::Episode>> PodcastStore::episode(int episodeId) {
+    auto db = DatabaseManager::instance().database();
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral(
+        "SELECT id, feed_id, guid, title, description, enclosure_url, enclosure_type, "
+        "       enclosure_length, pub_date, duration_ms, episode_number, is_played, local_path "
+        "FROM podcast_episodes WHERE id = ?"));
+    q.addBindValue(episodeId);
+    if (!q.exec()) {
+        return Result<std::optional<Episode>>::err(Error::DatabaseError, q.lastError().text());
+    }
+    if (!q.next())
+        return Result<std::optional<Episode>>::ok(std::nullopt);
+    return Result<std::optional<Episode>>::ok(rowToEpisode(q));
+}
+
 Result<void> PodcastStore::setPlayed(int episodeId, bool played) {
     auto db = DatabaseManager::instance().database();
     QSqlQuery q(db);

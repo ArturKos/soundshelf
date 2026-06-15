@@ -225,6 +225,7 @@ set(SS_CORE_SOURCES
     src/core/DuplicateDetector.cpp
     src/core/Crossfader.cpp
     src/core/MprisAdapter.cpp
+    src/core/PodcastManager.cpp
 )
 
 set(SS_IO_SOURCES
