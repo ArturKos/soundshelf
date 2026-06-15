@@ -20,6 +20,7 @@ QStringList SchemaMigrator::availableMigrations() {
         QStringLiteral(":/migrations/004_smart_playlists.sql"),
         QStringLiteral(":/migrations/005_play_history.sql"),
         QStringLiteral(":/migrations/006_bookmarks.sql"),
+        QStringLiteral(":/migrations/007_podcasts.sql"),
     };
 }
 

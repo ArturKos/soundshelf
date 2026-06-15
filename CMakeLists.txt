@@ -247,6 +247,7 @@ set(SS_DATA_SOURCES
     src/data/PlayHistory.cpp
     src/data/FTS5Index.cpp
     src/data/BookmarkStore.cpp
+    src/data/PodcastStore.cpp
 )
 
 set(SS_NETWORK_SOURCES
@@ -377,6 +378,7 @@ qt_add_resources(soundshelf_lib "soundshelf_resources"
         migrations/004_smart_playlists.sql
         migrations/005_play_history.sql
         migrations/006_bookmarks.sql
+        migrations/007_podcasts.sql
         resources/themes/modern_dark.qss
         resources/themes/amber_crt.qss
         resources/themes/phosphor.qss

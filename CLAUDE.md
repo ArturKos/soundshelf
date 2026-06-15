@@ -324,7 +324,7 @@ Global hotkeys (system-wide, można wyłączyć):
 
 | Moduł | Status |
 |---|---|
-| Schema bazy + migracje | **działa** — migracje 001–005 (replaygain, acoustid, smart_playlists, play_history), `SchemaMigrator` + `DatabaseManager` pełne |
+| Schema bazy + migracje | **działa** — migracje 001–007 (replaygain, acoustid, smart_playlists, play_history, bookmarks, podcasts), `SchemaMigrator` + `DatabaseManager` pełne |
 | TagInfo (TagLib wrapper) | **działa** (read+write, encoding fallback) |
 | DiscReader — `FolderReader` | **działa** |
 | DiscReader — `CDDAReader` | **działa** — libcdio/paranoia + discid, WAV out (kompilowane pod `SOUNDSHELF_HAVE_LIBCDIO`) |
@@ -338,7 +338,8 @@ Global hotkeys (system-wide, można wyłączyć):
 | PlaylistManager + import/export (M3U/PLS/XSPF) | **działa** |
 | DuplicateDetector | **działa** (z testem) |
 | FormatConverter (ffmpeg) | **działa** |
-| `io::PodcastFeedParser` (feature #12 parser) | **działa** — RSS 2.0 + iTunes namespace → `Feed`/`Episode` structs; `parseFile`, `parseBytes`, `parseItunesDuration` (z testem). `PodcastManager` download/refresh + feeds DB schema = future work |
+| `io::PodcastFeedParser` (feature #12 parser) | **działa** — RSS 2.0 + iTunes namespace → `Feed`/`Episode` structs; `parseFile`, `parseBytes`, `parseItunesDuration` (z testem) |
+| `data::PodcastStore` + migration 007 (feature #12 DB) | **działa** — `podcast_feeds` + `podcast_episodes` tables, migration 007, `subscribe`/`updateFeedMetadata`/`upsertEpisodes`/`episodesForFeed`/`setPlayed`/`setLocalPath`/`unsubscribe` (z testem). `PodcastManager` network download/refresh = future work |
 | PlayerEngine (libmpv) | **działa** — play/seek/vol/auto-advance, presety EQ z JSON, spektrum FFT (FFTW3), crossfade (fade-out przez `Crossfader`). *Future work:* prawdziwy overlap (2. instancja mpv) i PCM tap z libmpv zasilający spektrum w czasie rzeczywistym |
 | MainWindow + UI | **wpięte end-to-end** (import → biblioteka → playback); większość widgetów ma realny kod |
 | MPRIS adapter | **działa** (Linux/QtDBus) |
@@ -350,7 +351,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve). `next/prev/daemon/remote` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 18 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, **accuraterip, bookmark_store, podcast_feed_parser**) |
+| Testy | 19 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, **podcast_store**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
