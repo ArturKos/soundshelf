@@ -233,6 +233,7 @@ set(SS_IO_SOURCES
     src/io/CDDAReader.cpp
     src/io/ImageReader.cpp
     src/io/CueParser.cpp
+    src/io/PodcastFeedParser.cpp
     src/io/DiscRipper.cpp
     src/io/FormatConverter.cpp
     src/io/PcmDecoder.cpp
