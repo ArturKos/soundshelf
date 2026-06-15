@@ -347,12 +347,13 @@ Global hotkeys (system-wide, można wyłączyć):
 | HTTP server (headless `--serve`) | **działa** — `main.cpp --serve --port`, Bearer token, REST przez `HttpServer` |
 | Last.fm / ListenBrainz scrobbler | **działa** — `Scrobbler` + `ScrobbleDrainer` (kolejka offline) + podpis Last.fm (z testem) |
 | MusicBrainz / CoverArt / DiscEnricher | **działa** (metadata fallback + enrichment płyt) |
+| `network::MusicBrainzSubmitter` (feature #20) | **działa** — Release Editor Seeding (browser-based, no OAuth): `buildSeedFields` + `buildSeedUrl`; DiscType→MB format mapping (z testem) |
 | LyricsClient (LRCLib) + LyricsWidget | **działa** |
 | SpectrumWidget | **działa** — wbudowany retro renderer słupków z `spectrumData()`; ustępuje miejsca aktywnemu pluginowi |
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**). `next/prev/daemon/remote` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 21 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, **test_cli_podcast**) |
+| Testy | 22 pliki (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, **test_musicbrainz_submitter**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)

@@ -254,6 +254,7 @@ set(SS_DATA_SOURCES
 set(SS_NETWORK_SOURCES
     src/network/RestClient.cpp
     src/network/MusicBrainzClient.cpp
+    src/network/MusicBrainzSubmitter.cpp
     src/network/AcoustIDClient.cpp
     src/network/CoverArtClient.cpp
     src/network/LyricsClient.cpp

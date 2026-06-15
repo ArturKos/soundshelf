@@ -394,3 +394,30 @@ INSERT do queue. Worker thread co 30 sekund próbuje wysłać niewysłane scrobb
 - ✅ Robustness — można odsłuchiwać offline, scrobble dotrą po reconnect.
 - ✅ Łatwe debugowanie ("ile zalega w queue?" → `soundshelf scrobble status`).
 - ❌ Drobny overhead bazy (akceptowalne — kilka KB dla tysięcy scrobble).
+
+---
+
+## ADR-021: MusicBrainzSubmitter — Release Editor Seeding zamiast WS2 POST + OAuth
+
+**Status:** zaakceptowane
+**Data:** iteracja 3 (feature #20)
+
+**Kontekst:** Feature #20 wymaga seedowania nieznanych płyt do MusicBrainz.
+MusicBrainz oferuje dwie ścieżki: (a) POST do WS2 z OAuth2 tokenem (wymaga
+rejestracji aplikacji, tokenu, obsługi błędów API) lub (b) Release Editor
+Seeding — zbuduj URL z parametrami i otwórz w przeglądarce, użytkownik
+weryfikuje i składa formularz ręcznie.
+
+**Decyzja:** Release Editor Seeding (opcja b).
+`network::MusicBrainzSubmitter` buduje pola formularza i URL w dwóch
+statycznych, bezstanowych metodach (`buildSeedFields` / `buildSeedUrl`).
+Otwarcie przeglądarki i faktyczne wysłanie leży po stronie UI/CLI (wywołanie
+`QDesktopServices::openUrl`), nie w tej klasie.
+
+**Konsekwencje:**
+- ✅ Zero OAuth — brak rejestracji aplikacji, tokenów, refresh flow.
+- ✅ Użytkownik weryfikuje dane przed wysłaniem — mniejsze ryzyko "śmieciowego" wpisu w MB.
+- ✅ Czyste, w pełni testowalne (pure static builders, bez sieci).
+- ✅ Brak nowych zależności — tylko Qt6 Core.
+- ❌ Użytkownik musi mieć konto MB i kliknąć "Submit" w przeglądarce.
+  Akceptowalne jako implementacja początkowa — WS2/OAuth można dodać później.
