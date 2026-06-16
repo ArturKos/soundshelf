@@ -46,8 +46,7 @@ Result<void> FolderWatcher::addRoot(const QString& root) {
     while (it.hasNext()) dirs << it.next();
     m_fs.addPaths(dirs);
 
-    QStringList initial;
-    scanInto(absRoot, initial);
+    const QStringList initial = scanAudioFiles(absRoot);
     for (const auto& f : initial) m_known.insert(f);
 
     qCInfo(lcWatch) << "Watching root" << absRoot
@@ -73,18 +72,31 @@ void FolderWatcher::removeRoot(const QString& root) {
     m_known = stillKnown;
 }
 
-void FolderWatcher::scanInto(const QString& dir, QStringList& outFiles) {
-    const QSet<QString> exts = QSet<QString>(
-        FolderReader::audioExtensions().begin(),
-        FolderReader::audioExtensions().end());
-
+QStringList FolderWatcher::scanAudioFiles(const QString& dir) {
+    const QStringList extList = FolderReader::audioExtensions();
+    const QSet<QString> exts(extList.begin(), extList.end());
     QDir d(dir);
+    QStringList result;
     for (const QFileInfo& fi : d.entryInfoList(
              QDir::Files | QDir::NoDotAndDotDot, QDir::Name)) {
-        if (exts.contains(fi.suffix().toLower())) {
-            outFiles << fi.absoluteFilePath();
-        }
+        if (exts.contains(fi.suffix().toLower()))
+            result << fi.absoluteFilePath();
     }
+    return result;
+}
+
+FolderWatcher::DirDiff FolderWatcher::diffFiles(const QSet<QString>& known,
+                                                const QSet<QString>& current) {
+    DirDiff diff;
+    for (const QString& f : current) {
+        if (!known.contains(f)) diff.added << f;
+    }
+    for (const QString& f : known) {
+        if (!current.contains(f)) diff.removed << f;
+    }
+    diff.added.sort();
+    diff.removed.sort();
+    return diff;
 }
 
 void FolderWatcher::onDirectoryChanged(const QString& path) {
@@ -96,24 +108,24 @@ void FolderWatcher::onDirectoryChanged(const QString& path) {
         if (!m_fs.directories().contains(p)) m_fs.addPath(p);
     }
 
-    QStringList currentFiles;
-    scanInto(path, currentFiles);
-    QSet<QString> currentSet(currentFiles.begin(), currentFiles.end());
+    const QStringList currentList = scanAudioFiles(path);
+    const QSet<QString> currentSet(currentList.begin(), currentList.end());
 
-    // What's known but no longer here?
+    // Build the subset of m_known that belongs to this directory.
+    QSet<QString> knownSubset;
     for (const QString& f : m_known) {
-        if (!QFileInfo(f).absolutePath().startsWith(path)) continue;
-        if (!currentSet.contains(f)) m_pendingDel << f;
+        if (QFileInfo(f).absolutePath().startsWith(path))
+            knownSubset.insert(f);
     }
-    // What's new?
-    for (const QString& f : currentSet) {
-        if (!m_known.contains(f)) m_pendingAdd << f;
-    }
+
+    const DirDiff diff = diffFiles(knownSubset, currentSet);
+    m_pendingAdd << diff.added;
+    m_pendingDel << diff.removed;
 
     // Update the known set immediately so a subsequent event doesn't
     // double-count the same file.
-    for (const QString& f : m_pendingAdd) m_known.insert(f);
-    for (const QString& f : m_pendingDel) m_known.remove(f);
+    for (const QString& f : diff.added)   m_known.insert(f);
+    for (const QString& f : diff.removed) m_known.remove(f);
 
     if (!m_paused) m_debounce.start();
 }

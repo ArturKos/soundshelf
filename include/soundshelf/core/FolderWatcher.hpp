@@ -24,6 +24,16 @@ namespace soundshelf {
 class FolderWatcher : public QObject {
     Q_OBJECT
 public:
+    /**
+     * @brief Result of comparing two sets of audio-file paths.
+     *
+     * Both lists are sorted ascending so callers get deterministic ordering.
+     */
+    struct DirDiff {
+        QStringList added;   ///< Paths present in @c current but not in @c known.
+        QStringList removed; ///< Paths present in @c known but not in @c current.
+    };
+
     explicit FolderWatcher(QObject* parent = nullptr);
     ~FolderWatcher() override;
 
@@ -40,6 +50,28 @@ public:
     void setPaused(bool paused);
     bool isPaused() const { return m_paused; }
 
+    /**
+     * @brief Non-recursively scan @p dir for audio files.
+     *
+     * Returns absolute paths of regular files whose lower-cased extension
+     * is among FolderReader::audioExtensions(), sorted ascending by file
+     * name.  Subdirectory contents are NOT included.
+     *
+     * @param dir Directory to scan (must exist).
+     * @return Sorted list of absolute audio-file paths (may be empty).
+     */
+    static QStringList scanAudioFiles(const QString& dir);
+
+    /**
+     * @brief Compute the difference between two file-path sets.
+     *
+     * @param known   Previously observed set of absolute paths.
+     * @param current Currently observed set of absolute paths.
+     * @return DirDiff with @c added and @c removed lists, both sorted ascending.
+     */
+    static DirDiff diffFiles(const QSet<QString>& known,
+                             const QSet<QString>& current);
+
 signals:
     /// Emitted after the debounce window with the set of newly-added
     /// audio files.
@@ -54,8 +86,6 @@ private slots:
     void flushPending();
 
 private:
-    void scanInto(const QString& dir, QStringList& outFiles);
-
     QFileSystemWatcher m_fs;
     QStringList  m_roots;
     QSet<QString> m_known;

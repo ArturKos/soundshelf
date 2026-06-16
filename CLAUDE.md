@@ -327,6 +327,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Schema bazy + migracje | **działa** — migracje 001–008 (replaygain, acoustid, smart_playlists, play_history, bookmarks, podcasts, **fts_contentless_sync**), `SchemaMigrator` + `DatabaseManager` pełne; `listDiscs` filtruje po typie (WHERE type=?); migration 008 fixes contentless FTS5 DELETE bug (tracks_ad/au, discs_ad/au) using the 'delete' special-insert idiom |
 | TagInfo (TagLib wrapper) | **działa** (read+write, encoding fallback) |
 | DiscReader — `FolderReader` | **działa** |
+| `core::FolderWatcher` (feature #3) | **działa** — recursive `QFileSystemWatcher`-based auto-import; pure static helpers `scanAudioFiles` (non-recursive, sorted, extension-filtered) and `diffFiles` (set diff, sorted output) extracted for testability; `onDirectoryChanged` composed from helpers; debounce 500 ms; `addRoot`/`removeRoot`/`setPaused`/`filesAdded`/`filesRemoved` (z testem) |
 | DiscReader — `CDDAReader` | **działa** — libcdio/paranoia + discid, WAV out (kompilowane pod `SOUNDSHELF_HAVE_LIBCDIO`) |
 | DiscReader — `ImageReader` / `CueParser` | **działa** — `CueParser` supports single & multi-file sheets (z testem); `ImageReader` resolves all files, probes durations (z testem) |
 | `DiscRipper` | **działa** (rip + tag) |
@@ -357,7 +358,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**, **remote list/get/url**). `next/prev/daemon` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work. Globalne flagi `--server`/`--token` dla komendy `remote`. |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 27 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, test_database_discs, test_lrc_parser, **test_play_history**) |
+| Testy | 28 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, test_database_discs, test_lrc_parser, test_play_history, **test_folder_watcher**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
