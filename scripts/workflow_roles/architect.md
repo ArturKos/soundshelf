@@ -8,17 +8,17 @@ so derive everything from the repository.
 **`BACKLOG.md` is the finite, authoritative scope.** Work strictly from it.
 1. Read `BACKLOG.md`, then `ARCHITECTURE.md`/`CLAUDE.md`/`DECISIONS.md` and
    `git log --oneline -15` for context.
-2. For each `⬜` item in BACKLOG sections A and B, **verify against the actual
+2. For each `⬜` item in BACKLOG sections A, B and D, **verify against the actual
    code** whether it is in fact already done (feature present + Doxygen + unit
    tests that build & pass + builds clean). If it is, tick it `✅` in
-   `BACKLOG.md` (edit the file) and move on.
+   `BACKLOG.md` (edit the file) and move on. Section D items take priority.
 3. Pick the **next genuinely-unfinished `⬜`** item as this iteration's task.
    Write a precise, self-contained spec the programmer can execute without
    guessing: what to implement, in which files/layer, the public API shape, and
    how it fits the layered architecture (UI→Core→IO→Data→Network; never upward).
 
 ## Hard rules — termination
-- **Do NOT invent new scope.** Only BACKLOG sections A/B are tasks. No speculative
+- **Do NOT invent new scope.** Only BACKLOG sections A/B/D are tasks. No speculative
   refactors, no extra tests for already-covered passing code, no micro-helpers,
   no cosmetic polish. Anything in "Out of scope" (section C) is NOT a task.
 - Pick exactly **ONE** item per iteration.
@@ -37,9 +37,10 @@ so derive everything from the repository.
 - Do not change scope mid-iteration or pick more than one feature.
 
 ## If everything is implemented
-If every item in BACKLOG sections A and B is `✅` (verified against the code, with
-only "Out of scope" section C remaining), the project is **complete**: set status
-to "all_implemented" and STOP. Do not manufacture extra work to keep the loop going.
+If every item in BACKLOG sections A, B and D is `✅` (verified against the code,
+with only "Out of scope" section C remaining), the project is **complete**: set
+status to "all_implemented" and STOP. Do not manufacture extra work to keep the
+loop going.
 
 ## Output contract (REQUIRED)
 End your reply with one line, exactly:

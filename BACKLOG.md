@@ -57,6 +57,15 @@ remain, the project is complete → `all_implemented`.
 | CLI: all subcommands wired | ✅ |
 | Cross-platform build (Linux + Windows/vcpkg) + CI | ✅ |
 
+## D. Additional accepted tasks (added by user 2026-06-16)
+
+Pick these in order. They ARE in scope and gate completion.
+
+| # | Task | Status |
+|---|------|--------|
+| D1 | **Fix GitHub Actions CI** — it currently fails on *every* commit. Investigate `.github/workflows/ci.yml` and the failing runs (`GH_TOKEN=$(cat ~/git_token) gh run list` / `gh run view <id> --log-failed`), find the real cause, and fix the workflow so both the Linux and Windows jobs pass. Verify by checking a fresh run after the fix is pushed. | ⬜ |
+| D2 | **CLI test suite covering all functionality** — add automated tests that exercise every `soundshelf-cli` subcommand (play/pause/resume/stop/seek/volume/status, import/list/search/info, tag, disc list/search/add/tracks/play, replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db migrate/vacuum/info, podcast, remote, serve, plugin). Build a harness that runs the **built** `soundshelf-cli` against a temp DB + generated audio fixtures (ffmpeg) and asserts expected output / exit codes. Register it so `ctest` runs it; must pass on Linux. | ⬜ |
+
 ## C. Out of scope — DO NOT implement (autonomously unverifiable / future work)
 
 These require hardware, a running GUI/display, deploy artifacts, or are explicit
@@ -75,6 +84,7 @@ These require hardware, a running GUI/display, deploy artifacts, or are explicit
 
 ### Completion
 
-When sections A and B are all `✅` (verified against the code, tests green on
-Linux, builds clean on Linux and Windows), the architecture is **complete** —
-emit `all_implemented`. Everything else lives in section C and is the human's call.
+When sections A, B and D are all `✅` (verified against the code, tests green on
+Linux, builds clean on Linux and Windows, CI green), the architecture is
+**complete** — emit `all_implemented`. Everything else lives in section C and is
+the human's call.
