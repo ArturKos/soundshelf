@@ -54,6 +54,11 @@ public:
     Result<Disc> getDisc(int id);
     Result<Disc> getDiscByDiscId(const QString& tocDiscId);
     Result<QList<Disc>> searchDiscs(const QString& query, int limit = 50);
+    /// Returns up to @p limit discs whose `type` column exactly matches
+    /// @p filter, ordered by insertion time (newest first).
+    /// Each DiscType value maps to a distinct stored string
+    /// ('folder', 'physical', 'image', 'remote') via discTypeToString().
+    /// Call once per DiscType to enumerate all discs by category.
     Result<QList<Disc>> listDiscs(DiscType filter, int limit = 1000);
 
     /// All tracks belonging to one disc, ordered by (disc_number, track_number).

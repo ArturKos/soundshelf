@@ -324,7 +324,7 @@ Global hotkeys (system-wide, można wyłączyć):
 
 | Moduł | Status |
 |---|---|
-| Schema bazy + migracje | **działa** — migracje 001–007 (replaygain, acoustid, smart_playlists, play_history, bookmarks, podcasts), `SchemaMigrator` + `DatabaseManager` pełne |
+| Schema bazy + migracje | **działa** — migracje 001–007 (replaygain, acoustid, smart_playlists, play_history, bookmarks, podcasts), `SchemaMigrator` + `DatabaseManager` pełne; `listDiscs` filtruje po typie (WHERE type=?) |
 | TagInfo (TagLib wrapper) | **działa** (read+write, encoding fallback) |
 | DiscReader — `FolderReader` | **działa** |
 | DiscReader — `CDDAReader` | **działa** — libcdio/paranoia + discid, WAV out (kompilowane pod `SOUNDSHELF_HAVE_LIBCDIO`) |
@@ -355,7 +355,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**, **remote list/get/url**). `next/prev/daemon` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work. Globalne flagi `--server`/`--token` dla komendy `remote`. |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 24 pliki (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, **test_remote_client**) |
+| Testy | 25 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, **test_database_discs**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)

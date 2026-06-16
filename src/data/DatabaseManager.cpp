@@ -495,10 +495,11 @@ Result<QList<Disc>> DatabaseManager::searchDiscs(const QString& query, int limit
 }
 
 Result<QList<Disc>> DatabaseManager::listDiscs(DiscType filter, int limit) {
+    qCDebug(lcDb) << "listDiscs type=" << discTypeToString(filter) << "limit=" << limit;
     QSqlQuery q(m_db);
-    Q_UNUSED(filter);  // TODO: dodać WHERE type=? gdy != "any"
     q.prepare(QStringLiteral(
-        "SELECT id FROM discs ORDER BY added_at DESC LIMIT ?"));
+        "SELECT id FROM discs WHERE type = ? ORDER BY added_at DESC LIMIT ?"));
+    q.addBindValue(discTypeToString(filter));
     q.addBindValue(limit);
     if (!q.exec()) {
         return Result<QList<Disc>>::err(Error::DatabaseError, q.lastError().text());
