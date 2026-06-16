@@ -385,6 +385,7 @@ qt_add_resources(soundshelf_lib "soundshelf_resources"
         migrations/005_play_history.sql
         migrations/006_bookmarks.sql
         migrations/007_podcasts.sql
+        migrations/008_fts_contentless_sync.sql
         resources/themes/modern_dark.qss
         resources/themes/amber_crt.qss
         resources/themes/phosphor.qss
