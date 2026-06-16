@@ -267,6 +267,7 @@ set(SS_NETWORK_SOURCES
     src/network/AccurateRip.cpp
     src/network/AccurateRipClient.cpp
     src/network/NetworkLibrary.cpp
+    src/network/HttpRange.cpp
     src/network/HttpServer.cpp
 )
 

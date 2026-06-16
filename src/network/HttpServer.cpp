@@ -1,4 +1,5 @@
 #include "soundshelf/network/HttpServer.hpp"
+#include "soundshelf/network/HttpRange.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
 
 #include <QJsonObject>
@@ -114,7 +115,7 @@ Result<void> HttpServer::start(const QHostAddress& host, quint16 port) {
         });
 
     server.route(QStringLiteral("/api/v1/stream/<arg>"),
-        [this](int id, const QHttpServerRequest& req) {
+        [this](int id, const QHttpServerRequest& req) -> QHttpServerResponse {
             if (!authorise(req, m_token)) {
                 return QHttpServerResponse(
                     QHttpServerResponse::StatusCode::Unauthorized);
@@ -129,8 +130,40 @@ Result<void> HttpServer::start(const QHostAddress& host, quint16 port) {
                 return QHttpServerResponse(
                     QHttpServerResponse::StatusCode::Forbidden);
             }
+
+            using SC = QHttpServerResponse::StatusCode;
+            const qint64 totalSize = f.size();
+            const QByteArray rangeHdr = req.value(QByteArrayLiteral("Range"));
+            const RangeResult rr = HttpRange::parse(rangeHdr, totalSize);
+
+            if (rr.status == RangeStatus::Unsatisfiable) {
+                QHttpServerResponse resp(static_cast<SC>(416));
+                resp.addHeader("Content-Range",
+                    HttpRange::unsatisfiedContentRange(totalSize));
+                return resp;
+            }
+
+            if (rr.status == RangeStatus::Satisfiable) {
+                if (!f.seek(rr.range.start)) {
+                    return QHttpServerResponse(SC::InternalServerError);
+                }
+                const QByteArray chunk = f.read(rr.range.length());
+                QHttpServerResponse resp(
+                    QByteArrayLiteral("audio/octet-stream"),
+                    chunk,
+                    static_cast<SC>(206));
+                resp.addHeader("Content-Range",
+                    HttpRange::contentRange(rr.range, totalSize));
+                resp.addHeader("Accept-Ranges", QByteArrayLiteral("bytes"));
+                return resp;
+            }
+
+            // RangeStatus::None or RangeStatus::Malformed: full 200 with Accept-Ranges.
             const QByteArray bytes = f.readAll();
-            return QHttpServerResponse(QByteArrayLiteral("audio/octet-stream"), bytes);
+            QHttpServerResponse resp(
+                QByteArrayLiteral("audio/octet-stream"), bytes);
+            resp.addHeader("Accept-Ranges", QByteArrayLiteral("bytes"));
+            return resp;
         });
 
     auto* tcp = new QTcpServer(&server);
