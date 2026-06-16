@@ -143,6 +143,11 @@ jobs:
           vcpkgDirectory: ${{ github.workspace }}/vcpkg
           vcpkgGitCommitId: 495848814af4cc2760e70f7440c2dbe66d3ff196
 
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Download mpv-dev SDK
         shell: pwsh
         run: |
