@@ -37,6 +37,8 @@ jobs:
         run: cmake --build build -j
 
       - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure
 
       - name: Upload binaries
@@ -103,6 +105,8 @@ jobs:
         run: cmake --build build -j
 
       - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build --output-on-failure
 
       - name: Deploy bundle
@@ -130,7 +134,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.7.*'
-          arch: win64_msvc2022_64
+          arch: win64_msvc2019_64
           modules: qthttpserver qtmultimedia qtsvg
 
       - name: Setup vcpkg
@@ -172,6 +176,7 @@ jobs:
         shell: pwsh
         env:
           PATH: ${{ github.workspace }}/external/mpv-dev;${{ env.PATH }}
+          QT_QPA_PLATFORM: offscreen
         run: ctest --test-dir build-vcpkg --output-on-failure
 
       - name: Deploy bundle

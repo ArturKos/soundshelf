@@ -14,6 +14,9 @@
 #  include <QHttpServerResponse>
 #  include <QHttpServerRequest>
 #  include <QTcpServer>
+#  if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+#    include <QHttpHeaders>
+#  endif
 #endif
 
 Q_LOGGING_CATEGORY(lcHttp, "soundshelf.network.http")
@@ -41,6 +44,22 @@ bool HttpServer::isAvailable() {
 
 #ifdef SOUNDSHELF_HAVE_HTTPSERVER
 namespace {
+
+/** Version-portable helper: set a single response header.
+ *  Qt < 6.7 exposes addHeader(QByteArray, QByteArray);
+ *  Qt >= 6.7 replaced it with the QHttpHeaders API.
+ */
+void setResponseHeader(QHttpServerResponse& resp,
+                       const QByteArray& name, const QByteArray& value)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    QHttpHeaders h = resp.headers();
+    h.append(name, value);
+    resp.setHeaders(std::move(h));
+#else
+    resp.addHeader(name, value);
+#endif
+}
 
 bool authorise(const QHttpServerRequest& req, const QString& expected) {
     if (expected.isEmpty()) return false;
@@ -138,7 +157,7 @@ Result<void> HttpServer::start(const QHostAddress& host, quint16 port) {
 
             if (rr.status == RangeStatus::Unsatisfiable) {
                 QHttpServerResponse resp(static_cast<SC>(416));
-                resp.addHeader("Content-Range",
+                setResponseHeader(resp, "Content-Range",
                     HttpRange::unsatisfiedContentRange(totalSize));
                 return resp;
             }
@@ -152,9 +171,10 @@ Result<void> HttpServer::start(const QHostAddress& host, quint16 port) {
                     QByteArrayLiteral("audio/octet-stream"),
                     chunk,
                     static_cast<SC>(206));
-                resp.addHeader("Content-Range",
+                setResponseHeader(resp, "Content-Range",
                     HttpRange::contentRange(rr.range, totalSize));
-                resp.addHeader("Accept-Ranges", QByteArrayLiteral("bytes"));
+                setResponseHeader(resp, "Accept-Ranges",
+                    QByteArrayLiteral("bytes"));
                 return resp;
             }
 
@@ -162,7 +182,7 @@ Result<void> HttpServer::start(const QHostAddress& host, quint16 port) {
             const QByteArray bytes = f.readAll();
             QHttpServerResponse resp(
                 QByteArrayLiteral("audio/octet-stream"), bytes);
-            resp.addHeader("Accept-Ranges", QByteArrayLiteral("bytes"));
+            setResponseHeader(resp, "Accept-Ranges", QByteArrayLiteral("bytes"));
             return resp;
         });
 

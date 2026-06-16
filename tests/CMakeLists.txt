@@ -9,6 +9,7 @@ function(soundshelf_add_test name source)
         Qt6::Core
     )
     add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endfunction()
 
 soundshelf_add_test(test_smart_playlist     test_smart_playlist.cpp)
