@@ -16,8 +16,8 @@ namespace soundshelf {
  * with libmpv's bundled FFmpeg and bloat the binary. Instead it spawns
  * the system `ffmpeg(1)`.
  *
- * Conversion preserves all tags via `-map_metadata 0` and copies cover
- * art via `-c:v copy` for containers that allow it.
+ * Conversion preserves all tags via `-map_metadata 0` and strips video
+ * streams with `-vn` (cover art is not copied).
  *
  * Typical usage:
  * @code
@@ -62,6 +62,16 @@ public:
 
     /// Returns true if a usable `ffmpeg` is available on `PATH`.
     static bool isAvailable();
+
+    /**
+     * @brief Returns the canonical lowercase file extension (without dot) for @p f.
+     *
+     * Intended for constructing output file names without duplicating the
+     * format→extension mapping in callers. The mapping is:
+     * Mp3V0/Mp3_320 → "mp3", OggVorbis → "ogg", Opus_128 → "opus",
+     * Aac_256 → "m4a", Flac → "flac", WavPcm16 → "wav".
+     */
+    static QString extensionForFormat(Format f);
 
     /// Builds the argv that will be passed to ffmpeg for @p job.
     /// Public for testability.

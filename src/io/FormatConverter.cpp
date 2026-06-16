@@ -74,6 +74,19 @@ bool FormatConverter::isAvailable() {
     return !ffmpegPath().isEmpty();
 }
 
+QString FormatConverter::extensionForFormat(Format f) {
+    switch (f) {
+        case Format::Mp3V0:    return QStringLiteral("mp3");
+        case Format::Mp3_320:  return QStringLiteral("mp3");
+        case Format::OggVorbis: return QStringLiteral("ogg");
+        case Format::Opus_128: return QStringLiteral("opus");
+        case Format::Aac_256:  return QStringLiteral("m4a");
+        case Format::Flac:     return QStringLiteral("flac");
+        case Format::WavPcm16: return QStringLiteral("wav");
+    }
+    return QStringLiteral("flac"); // unreachable, satisfies MSVC
+}
+
 QStringList FormatConverter::buildArguments(const Job& job) {
     QStringList args;
     args << QStringLiteral("-hide_banner") << QStringLiteral("-nostdin");

@@ -15,22 +15,6 @@
 
 namespace soundshelf {
 
-namespace {
-
-QString formatExt(FormatConverter::Format f) {
-    using F = FormatConverter::Format;
-    switch (f) {
-        case F::Mp3V0: case F::Mp3_320: return QStringLiteral("mp3");
-        case F::OggVorbis: return QStringLiteral("ogg");
-        case F::Opus_128:  return QStringLiteral("opus");
-        case F::Aac_256:   return QStringLiteral("m4a");
-        case F::Flac:      return QStringLiteral("flac");
-        case F::WavPcm16:  return QStringLiteral("wav");
-    }
-    return QStringLiteral("flac");
-}
-
-} // namespace
 
 ConverterDialog::ConverterDialog(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
@@ -108,7 +92,7 @@ void ConverterDialog::startNext() {
     FormatConverter::Job job;
     job.input  = t.filepath;
     job.output = QDir(m_outputDir->text())
-        .filePath(stem + QLatin1Char('.') + formatExt(fmt));
+        .filePath(stem + QLatin1Char('.') + FormatConverter::extensionForFormat(fmt));
     job.format = fmt;
     job.overwrite = m_overwrite->isChecked();
 
