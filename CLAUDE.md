@@ -346,20 +346,21 @@ Global hotkeys (system-wide, można wyłączyć):
 | MainWindow + UI | **wpięte end-to-end** (import → biblioteka → playback); większość widgetów ma realny kod |
 | MPRIS adapter | **działa** (Linux/QtDBus) |
 | HTTP server (headless `--serve`) | **działa** — `main.cpp --serve --port`, Bearer token, REST przez `HttpServer` |
+| `network::RemoteClient` (feature #19 client) | **działa** — `buildListQuery`/`trackFromJson`/`parseTrackList`/`parseTrack`/`streamUrl` (czyste statyczne, bez sieci); `listTracks`/`track` blokujące (RestClient.getJson.result()); logging `soundshelf.network.remote` (z testem) |
 | Last.fm / ListenBrainz scrobbler | **działa** — `Scrobbler` + `ScrobbleDrainer` (kolejka offline) + podpis Last.fm (z testem) |
 | MusicBrainz / CoverArt / DiscEnricher | **działa** (metadata fallback + enrichment płyt) |
 | `network::MusicBrainzSubmitter` (feature #20) | **działa** — Release Editor Seeding (browser-based, no OAuth): `buildSeedFields` + `buildSeedUrl`; DiscType→MB format mapping (z testem) |
 | LyricsClient (LRCLib) + LyricsWidget | **działa** |
 | SpectrumWidget | **działa** — wbudowany retro renderer słupków z `spectrumData()`; ustępuje miejsca aktywnemu pluginowi |
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
-| CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**). `next/prev/daemon/remote` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work |
+| CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**, **remote list/get/url**). `next/prev/daemon` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work. Globalne flagi `--server`/`--token` dla komendy `remote`. |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 23 pliki (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, **test_library_io**) |
+| Testy | 24 pliki (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, **test_remote_client**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
 - Visualization: test na realnej Winamp vis DLL (Windows + przykładowa DLL)
-- CLI: IPC (D-Bus/named pipe) do działającego GUI dla `next/prev/daemon/remote`
+- CLI: IPC (D-Bus/named pipe) do działającego GUI dla `next/prev/daemon`
 - AcoustID: konfiguracja klucza API (`acoustid.api_key`) w Preferencjach
 - Tłumaczenia: uzupełnić `.ts` poza seedem
 - PodcastManager: integracja z GUI (wątek roboczy / `QtConcurrent::run` żeby nie blokować UI thread)

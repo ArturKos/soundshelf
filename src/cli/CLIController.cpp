@@ -11,6 +11,7 @@
 #include "soundshelf/core/ChromaprintEngine.hpp"
 #include "soundshelf/core/PodcastManager.hpp"
 #include "soundshelf/network/AcoustIDClient.hpp"
+#include "soundshelf/network/RemoteClient.hpp"
 #include "soundshelf/data/DatabaseManager.hpp"
 #include "soundshelf/data/PlayHistory.hpp"
 #include "soundshelf/data/PodcastStore.hpp"
@@ -63,6 +64,8 @@ void printUsage() {
         "  --lang en|pl|de|fr        Interface language\n"
         "  --db PATH                 Database path\n"
         "  --format json|table|csv   Output format\n"
+        "  --server URL              Remote server base URL (for 'remote' command)\n"
+        "  --token TOKEN             Bearer token (for 'remote' command)\n"
         "  -q, --quiet               Errors only\n"
         "  -v, --verbose             Debug output\n"
         "  -h, --help                Show this help\n"
@@ -113,7 +116,9 @@ void printUsage() {
         "  podcast played <epId> [--unset]     Mark episode played / unplayed\n"
         "  podcast unsubscribe <feedId>        Remove feed and all its episodes\n"
         "\n"
-        "  remote list|add|sync|play|search\n"
+        "  remote list [query]           List tracks on remote server\n"
+        "  remote get <id>               Fetch remote track details\n"
+        "  remote url <id>               Print audio stream URL\n"
         "  serve [--port 8080] [--bind 0.0.0.0] [--auth TOKEN]\n"
         "  daemon start|stop|status\n"
         "  scrobble status|flush|auth\n"
@@ -169,6 +174,8 @@ int CLIController::run(const QStringList& args) {
         if (a == "--lang" && i + 1 < args.size())          { m_locale = args[++i]; }
         else if (a == "--db" && i + 1 < args.size())       { m_dbPath = args[++i]; }
         else if (a == "--format" && i + 1 < args.size())   { m_format = args[++i]; }
+        else if (a == "--server" && i + 1 < args.size())   { m_remoteServer = args[++i]; }
+        else if (a == "--token" && i + 1 < args.size())    { m_remoteToken = args[++i]; }
         else if (a == "-q" || a == "--quiet")              { m_quiet = true; }
         else if (a == "-v" || a == "--verbose")            { m_verbose = true; }
         else if (a == "--version")                          { return cmdVersion(); }
@@ -1117,11 +1124,142 @@ int CLIController::cmdPodcast(const QStringList& args) {
 }
 
 int CLIController::cmdRemote(const QStringList& args) {
-    Q_UNUSED(args);
+    // Allow --server / --token anywhere in the remote subcommand args,
+    // falling back to values set by global flags, then to stored settings.
+    QString serverUrl = m_remoteServer;
+    QString token = m_remoteToken;
+    QStringList cleanArgs;
+    for (int i = 0; i < args.size(); ++i) {
+        if (args[i] == QStringLiteral("--server") && i + 1 < args.size())
+            serverUrl = args[++i];
+        else if (args[i] == QStringLiteral("--token") && i + 1 < args.size())
+            token = args[++i];
+        else
+            cleanArgs << args[i];
+    }
+
+    if (serverUrl.isEmpty() || token.isEmpty()) {
+        if (auto* d = db()) {
+            if (serverUrl.isEmpty()) {
+                auto r = d->getSetting(QStringLiteral("remote.url"));
+                if (r && !r.value().isEmpty())
+                    serverUrl = r.value();
+            }
+            if (token.isEmpty()) {
+                auto r = d->getSetting(QStringLiteral("remote.token"));
+                if (r && !r.value().isEmpty())
+                    token = r.value();
+            }
+        }
+    }
+
+    if (serverUrl.isEmpty()) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "No server URL configured. Use --server <url> or set 'remote.url' in settings.") << "\n";
+        return 2;
+    }
+
+    const QString sub = cleanArgs.value(0);
+
+    if (sub == QStringLiteral("list")) {
+        const QString query = cleanArgs.mid(1).join(QLatin1Char(' ')).trimmed();
+        RemoteClient client(serverUrl, token);
+        auto r = client.listTracks(query);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        if (m_format == QStringLiteral("json")) {
+            QJsonArray arr;
+            for (const auto& t : r.value()) {
+                arr.append(QJsonObject{
+                    {QStringLiteral("id"),          t.id},
+                    {QStringLiteral("title"),       t.title},
+                    {QStringLiteral("artist"),      t.artist},
+                    {QStringLiteral("album"),       t.album},
+                    {QStringLiteral("duration_ms"), t.durationMs},
+                    {QStringLiteral("track_no"),    t.trackNumber},
+                    {QStringLiteral("disc_no"),     t.discNumber},
+                    {QStringLiteral("path"),        t.filepath},
+                });
+            }
+            stdOut() << QJsonDocument(arr).toJson(QJsonDocument::Compact) << "\n";
+        } else {
+            stdOut() << QString("%1  %2  %3  %4\n")
+                .arg("ID", -5).arg("Artist", -25).arg("Title", -40).arg("Album", -25);
+            for (const auto& t : r.value()) {
+                stdOut() << QString("%1  %2  %3  %4\n")
+                    .arg(t.id, -5)
+                    .arg(t.artist.left(25), -25)
+                    .arg(t.title.left(40), -40)
+                    .arg(t.album.left(25), -25);
+            }
+        }
+        return 0;
+    }
+
+    if (sub == QStringLiteral("get")) {
+        if (cleanArgs.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: remote get <id>") << "\n";
+            return 1;
+        }
+        bool ok;
+        const int id = cleanArgs[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid id: %1").arg(cleanArgs[1]) << "\n";
+            return 1;
+        }
+        RemoteClient client(serverUrl, token);
+        auto r = client.track(id);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        const auto& t = r.value();
+        if (m_format == QStringLiteral("json")) {
+            QJsonObject o{
+                {QStringLiteral("id"),          t.id},
+                {QStringLiteral("title"),       t.title},
+                {QStringLiteral("artist"),      t.artist},
+                {QStringLiteral("album"),       t.album},
+                {QStringLiteral("duration_ms"), t.durationMs},
+                {QStringLiteral("track_no"),    t.trackNumber},
+                {QStringLiteral("disc_no"),     t.discNumber},
+                {QStringLiteral("path"),        t.filepath},
+            };
+            stdOut() << QJsonDocument(o).toJson() << "\n";
+        } else {
+            stdOut() << "ID:       " << t.id << "\n"
+                     << "Title:    " << t.title << "\n"
+                     << "Artist:   " << t.artist << "\n"
+                     << "Album:    " << t.album << "\n"
+                     << "Duration: " << (t.durationMs / 1000) << "s\n"
+                     << "Track:    " << t.trackNumber << "\n"
+                     << "Disc:     " << t.discNumber << "\n"
+                     << "Path:     " << t.filepath << "\n";
+        }
+        return 0;
+    }
+
+    if (sub == QStringLiteral("url")) {
+        if (cleanArgs.size() < 2) {
+            stdErr() << QCoreApplication::translate("CLI", "Usage: remote url <id>") << "\n";
+            return 1;
+        }
+        bool ok;
+        const int id = cleanArgs[1].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI", "Invalid id: %1").arg(cleanArgs[1]) << "\n";
+            return 1;
+        }
+        RemoteClient client(serverUrl, token);
+        stdOut() << client.streamUrl(id) << "\n";
+        return 0;
+    }
+
+    if (sub.isEmpty()) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Usage: remote list [query] | get <id> | url <id>\n"
+            "       --server <url>  --token <token>") << "\n";
+        return 1;
+    }
+
     stdErr() << QCoreApplication::translate("CLI",
-        "remote talks to a SoundShelf server over HTTP. Configure the server URL and "
-        "bearer token first (see 'soundshelf serve'); remote control is exposed via the "
-        "REST API and the GUI's remote-library panel.") << "\n";
+        "Unknown remote subcommand: %1. Use list|get|url.").arg(sub) << "\n";
     return 1;
 }
 

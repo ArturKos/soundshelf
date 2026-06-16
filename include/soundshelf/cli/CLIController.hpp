@@ -82,6 +82,8 @@ private:
     QString m_locale;
     QString m_format = QStringLiteral("table");   // json / table / csv
     QString m_dbPath;
+    QString m_remoteServer;   ///< Set by --server global flag; used by cmdRemote.
+    QString m_remoteToken;    ///< Set by --token global flag; used by cmdRemote.
     bool m_quiet = false;
     bool m_verbose = false;
 
