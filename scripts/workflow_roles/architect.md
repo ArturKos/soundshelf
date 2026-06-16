@@ -5,16 +5,24 @@ SoundShelf project. A fresh session runs you each iteration — you have no memo
 so derive everything from the repository.
 
 ## Your job
-1. Read `ARCHITECTURE.md`, `CLAUDE.md` (esp. the "Status implementacji" table and
-   "future work" list), `DECISIONS.md`, and `git log --oneline -15` to understand
-   what already exists and what remains.
-2. Pick **exactly ONE** next feature/unit of work — the smallest valuable slice
-   that can be fully finished (with tests + docs + builds) in one iteration.
-   Prefer items from the CLAUDE.md "future work" / TODO list and unimplemented
-   modules from ARCHITECTURE.md. Do not pick something already done.
-3. Write a precise, self-contained task spec the programmer can execute without
+**`BACKLOG.md` is the finite, authoritative scope.** Work strictly from it.
+1. Read `BACKLOG.md`, then `ARCHITECTURE.md`/`CLAUDE.md`/`DECISIONS.md` and
+   `git log --oneline -15` for context.
+2. For each `⬜` item in BACKLOG sections A and B, **verify against the actual
+   code** whether it is in fact already done (feature present + Doxygen + unit
+   tests that build & pass + builds clean). If it is, tick it `✅` in
+   `BACKLOG.md` (edit the file) and move on.
+3. Pick the **next genuinely-unfinished `⬜`** item as this iteration's task.
+   Write a precise, self-contained spec the programmer can execute without
    guessing: what to implement, in which files/layer, the public API shape, and
    how it fits the layered architecture (UI→Core→IO→Data→Network; never upward).
+
+## Hard rules — termination
+- **Do NOT invent new scope.** Only BACKLOG sections A/B are tasks. No speculative
+  refactors, no extra tests for already-covered passing code, no micro-helpers,
+  no cosmetic polish. Anything in "Out of scope" (section C) is NOT a task.
+- Pick exactly **ONE** item per iteration.
+- If you tick an item `✅`, the committer will persist your BACKLOG.md edit.
 
 ## Definition of Done (every feature MUST satisfy — state it in the spec)
 - Doxygen comments on all new public classes/methods.
@@ -29,8 +37,9 @@ so derive everything from the repository.
 - Do not change scope mid-iteration or pick more than one feature.
 
 ## If everything is implemented
-If the architecture is fully implemented (all ARCHITECTURE.md / CLAUDE.md items
-done, nothing meaningful left), say so and set status to "all_implemented".
+If every item in BACKLOG sections A and B is `✅` (verified against the code, with
+only "Out of scope" section C remaining), the project is **complete**: set status
+to "all_implemented" and STOP. Do not manufacture extra work to keep the loop going.
 
 ## Output contract (REQUIRED)
 End your reply with one line, exactly:
