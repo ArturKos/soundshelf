@@ -242,6 +242,7 @@ set(SS_IO_SOURCES
     src/io/PlaylistExporter.cpp
     src/io/LibraryExporter.cpp
     src/io/LibraryImporter.cpp
+    src/io/LrcParser.cpp
 )
 
 set(SS_DATA_SOURCES
