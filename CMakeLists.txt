@@ -240,6 +240,8 @@ set(SS_IO_SOURCES
     src/io/PcmDecoder.cpp
     src/io/PlaylistImporter.cpp
     src/io/PlaylistExporter.cpp
+    src/io/LibraryExporter.cpp
+    src/io/LibraryImporter.cpp
 )
 
 set(SS_DATA_SOURCES

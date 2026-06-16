@@ -56,7 +56,7 @@ Pełna lista jest realizowana — nie traktuj ich jako "nice to have", to wymaga
 | 10 | Duplicate detector | `core::DuplicateDetector`, `ui::DuplicateDialog` | MD5 + AcoustID + tag matching |
 | 11 | Batch tag editor | `ui::BatchTagEditor` | TagLib |
 | 12 | Podcasty / audiobooki | `core::PodcastManager`, `data::Bookmark` | SQLite + RSS parser |
-| 13 | Eksport/import biblioteki + playlisty (M3U/PLS/XSPF) | `io::PlaylistImporter`, `io::PlaylistExporter` | własne |
+| 13 | Eksport/import biblioteki + playlisty (M3U/PLS/XSPF + JSON catalog) | `io::PlaylistImporter`, `io::PlaylistExporter`, `io::LibraryExporter`, `io::LibraryImporter` | własne |
 | 14 | AccurateRip verification | `io::AccurateRipClient` | REST + CRC32 |
 | 15 | Format converter (FFmpeg wrapper) | `io::FormatConverter` | `QProcess` → `ffmpeg` |
 | 16 | Lyrics (LRCLib + USLT/SYLT) | `network::LyricsClient`, `ui::LyricsWidget` | REST + parser LRC |
@@ -336,6 +336,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Translator + tłumaczenia | **działa**; `.ts` dla en/pl/de/fr (stringi seedowe, do uzupełnienia) |
 | SmartPlaylistEvaluator | **działa** |
 | PlaylistManager + import/export (M3U/PLS/XSPF) | **działa** |
+| `io::LibraryExporter` / `io::LibraryImporter` (feature #13 catalog) | **działa** — portable JSON export/import całego katalogu; `toJson`/`exportToFile` + `fromJson`/`importFromFile`; envelope z version/format/track_count; ReplayGain i cue offsets jako optional (omit gdy nullopt); QDateTime jako ISO 8601 UTC; DB-local pola (id/discId/coverHash) nie są eksportowane (z testem) |
 | DuplicateDetector | **działa** (z testem) |
 | FormatConverter (ffmpeg) | **działa** |
 | `io::PodcastFeedParser` (feature #12 parser) | **działa** — RSS 2.0 + iTunes namespace → `Feed`/`Episode` structs; `parseFile`, `parseBytes`, `parseItunesDuration` (z testem) |
@@ -353,7 +354,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**). `next/prev/daemon/remote` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 22 pliki (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, **test_musicbrainz_submitter**) |
+| Testy | 23 pliki (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, **test_library_io**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
