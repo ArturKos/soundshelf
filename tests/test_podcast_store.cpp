@@ -266,5 +266,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestPodcastStore)
+QTEST_GUILESS_MAIN(TestPodcastStore)
 #include "test_podcast_store.moc"

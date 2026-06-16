@@ -150,5 +150,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestBookmarkStore)
+QTEST_GUILESS_MAIN(TestBookmarkStore)
 #include "test_bookmark_store.moc"

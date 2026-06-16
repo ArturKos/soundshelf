@@ -237,5 +237,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestCliPodcast)
+QTEST_GUILESS_MAIN(TestCliPodcast)
 #include "test_cli_podcast.moc"

@@ -343,5 +343,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestPlayHistory)
+QTEST_GUILESS_MAIN(TestPlayHistory)
 #include "test_play_history.moc"

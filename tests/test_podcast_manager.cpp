@@ -303,5 +303,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestPodcastManager)
+QTEST_GUILESS_MAIN(TestPodcastManager)
 #include "test_podcast_manager.moc"

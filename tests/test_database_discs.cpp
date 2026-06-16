@@ -108,5 +108,5 @@ private slots:
     }
 };
 
-QTEST_APPLESS_MAIN(TestDatabaseDiscs)
+QTEST_GUILESS_MAIN(TestDatabaseDiscs)
 #include "test_database_discs.moc"
