@@ -28,9 +28,12 @@ namespace {
 
 /// Walks @p root, returning every file whose suffix is recognised as audio.
 QStringList collectAudioFiles(const QString& root) {
-    const QSet<QString> exts = QSet<QString>(
-        FolderReader::audioExtensions().begin(),
-        FolderReader::audioExtensions().end());
+    // NB: audioExtensions() returns by value — bind it to a named local so
+    // begin()/end() iterate the SAME container. Calling .begin() and .end() on
+    // two separate temporaries yields iterators into different objects, and the
+    // QSet range-ctor then computes a garbage distance → huge reserve → crash.
+    const QStringList extList = FolderReader::audioExtensions();
+    const QSet<QString> exts(extList.begin(), extList.end());
 
     QStringList out;
     QDirIterator it(root, QDir::Files | QDir::NoDotAndDotDot,

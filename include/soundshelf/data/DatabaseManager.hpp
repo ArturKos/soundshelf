@@ -5,6 +5,8 @@
 #include <QString>
 #include <optional>
 #include "soundshelf/core/Result.hpp"
+
+class QThread;
 #include "soundshelf/core/Track.hpp"
 #include "soundshelf/core/Disc.hpp"
 
@@ -109,8 +111,18 @@ signals:
 
 private:
     DatabaseManager() = default;
+
+    /// Returns a QSqlDatabase usable on the CALLING thread. QSqlDatabase is not
+    /// thread-safe: the main connection (`m_db`) may only be touched from the
+    /// thread that opened it, so worker threads (e.g. the QtConcurrent library
+    /// import) get their own connection to the same file (WAL handles the
+    /// concurrency). All query methods go through this, never `m_db` directly.
+    QSqlDatabase conn();
+
     QSqlDatabase m_db;
     QString m_connectionName = QStringLiteral("soundshelf_main");
+    QString m_dbPath;                  ///< file path, for per-thread connections
+    QThread* m_mainThread = nullptr;   ///< thread that opened m_db
 };
 
 } // namespace soundshelf

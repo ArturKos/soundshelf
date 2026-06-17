@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QFile>
 #include <QVariant>
+#include <QThread>
 #include <QLoggingCategory>
 
 Q_LOGGING_CATEGORY(lcDb, "soundshelf.db")
@@ -32,6 +33,34 @@ QSqlDatabase DatabaseManager::database() {
     return m_db;
 }
 
+QSqlDatabase DatabaseManager::conn() {
+    // Main thread (or before open) uses the primary connection.
+    QThread* cur = QThread::currentThread();
+    if (m_dbPath.isEmpty() || cur == m_mainThread) {
+        return m_db;
+    }
+    // Worker threads get their own connection to the same file. QSqlDatabase
+    // must not be shared across threads; WAL + busy_timeout handle concurrency.
+    const QString name = m_connectionName
+        + QStringLiteral("_t%1").arg(reinterpret_cast<quintptr>(cur), 0, 16);
+    if (QSqlDatabase::contains(name)) {
+        QSqlDatabase c = QSqlDatabase::database(name, /*open=*/true);
+        if (c.isOpen()) return c;
+    }
+    QSqlDatabase c = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), name);
+    c.setDatabaseName(m_dbPath);
+    if (!c.open()) {
+        qCWarning(lcDb) << "per-thread DB open failed:" << c.lastError().text();
+        return c;
+    }
+    QSqlQuery pragma(c);
+    pragma.exec(QStringLiteral("PRAGMA foreign_keys = ON"));
+    pragma.exec(QStringLiteral("PRAGMA journal_mode = WAL"));
+    pragma.exec(QStringLiteral("PRAGMA busy_timeout = 5000"));
+    qCDebug(lcDb) << "opened per-thread DB connection:" << name;
+    return c;
+}
+
 Result<void> DatabaseManager::open(const QString& dbPath) {
     if (m_db.isOpen()) m_db.close();
 
@@ -47,11 +76,15 @@ Result<void> DatabaseManager::open(const QString& dbPath) {
             QStringLiteral("Cannot open DB %1: %2").arg(dbPath, m_db.lastError().text()));
     }
 
-    // Pragmas
-    QSqlQuery q(m_db);
+    m_dbPath = dbPath;
+    m_mainThread = QThread::currentThread();
+
+    // Pragmas (on the main connection)
+    QSqlQuery q(conn());
     q.exec(QStringLiteral("PRAGMA foreign_keys = ON"));
     q.exec(QStringLiteral("PRAGMA journal_mode = WAL"));
     q.exec(QStringLiteral("PRAGMA encoding = 'UTF-8'"));
+    q.exec(QStringLiteral("PRAGMA busy_timeout = 5000"));
 
     qCInfo(lcDb) << "Opened database:" << dbPath;
 
@@ -70,7 +103,7 @@ void DatabaseManager::close() {
 Result<int> DatabaseManager::ensureArtist(const QString& name) {
     if (name.isEmpty()) return Result<int>::ok(-1);
 
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("SELECT id FROM artists WHERE name = ?"));
     q.addBindValue(name);
     if (q.exec() && q.next()) return Result<int>::ok(q.value(0).toInt());
@@ -87,7 +120,7 @@ Result<int> DatabaseManager::ensureArtist(const QString& name) {
 Result<int> DatabaseManager::ensureGenre(const QString& name) {
     if (name.isEmpty()) return Result<int>::ok(-1);
 
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("SELECT id FROM genres WHERE name = ?"));
     q.addBindValue(name);
     if (q.exec() && q.next()) return Result<int>::ok(q.value(0).toInt());
@@ -124,7 +157,7 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
         if (r) track.discId = r.value();
     }
 
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "INSERT INTO tracks(filepath, filename, disc_id, artist_id, album_artist_id, "
         "genre_id, title, track_number, disc_number, year, duration_ms, bitrate, "
@@ -186,7 +219,7 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
 }
 
 Result<Track> DatabaseManager::getTrack(int id) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT t.id, t.filepath, t.filename, t.disc_id, t.artist_id, t.album_artist_id, "
         "t.genre_id, t.title, t.track_number, t.disc_number, t.year, t.duration_ms, "
@@ -245,7 +278,7 @@ Result<Track> DatabaseManager::getTrack(int id) {
 }
 
 Result<Track> DatabaseManager::getTrackByPath(const QString& filepath) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("SELECT id FROM tracks WHERE filepath = ?"));
     q.addBindValue(filepath);
     if (!q.exec() || !q.next()) {
@@ -255,7 +288,7 @@ Result<Track> DatabaseManager::getTrackByPath(const QString& filepath) {
 }
 
 Result<QList<Track>> DatabaseManager::searchTracks(const QString& query, int limit) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     if (query.isEmpty()) {
         return listTracks(limit, 0);
     }
@@ -279,7 +312,7 @@ Result<QList<Track>> DatabaseManager::searchTracks(const QString& query, int lim
 }
 
 Result<QList<Track>> DatabaseManager::listTracks(int limit, int offset) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT id FROM tracks WHERE missing = 0 "
         "ORDER BY added_at DESC LIMIT ? OFFSET ?"));
@@ -298,7 +331,7 @@ Result<QList<Track>> DatabaseManager::listTracks(int limit, int offset) {
 }
 
 Result<void> DatabaseManager::updatePlayCount(int trackId) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "UPDATE tracks SET play_count = play_count + 1, "
         "last_played = CURRENT_TIMESTAMP WHERE id = ?"));
@@ -321,7 +354,7 @@ Result<void> DatabaseManager::updateReplayGain(int trackId,
     if (albumPeak) sets << QStringLiteral("rg_album_peak = ?");
     if (sets.isEmpty()) return Result<void>::ok();
 
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("UPDATE tracks SET %1 WHERE id = ?").arg(sets.join(", ")));
     if (trackGain) q.addBindValue(*trackGain);
     if (trackPeak) q.addBindValue(*trackPeak);
@@ -338,7 +371,7 @@ Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle,
                                               int artistId,
                                               const QByteArray& coverData) {
     if (albumTitle.isEmpty()) return Result<int>::ok(-1);
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT id, cover_data FROM discs WHERE title = ? "
         "AND COALESCE(artist_id, -1) = ? AND type = 'folder' LIMIT 1"));
@@ -349,7 +382,7 @@ Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle,
         const QByteArray existingCover = q.value(1).toByteArray();
         // Lazy fill: first track that brings a cover wins.
         if (existingCover.isEmpty() && !coverData.isEmpty()) {
-            QSqlQuery up(m_db);
+            QSqlQuery up(conn());
             up.prepare(QStringLiteral("UPDATE discs SET cover_data = ? WHERE id = ?"));
             up.addBindValue(coverData);
             up.addBindValue(existingId);
@@ -372,7 +405,7 @@ Result<int> DatabaseManager::ensureFolderDisc(const QString& albumTitle,
 }
 
 Result<QList<Track>> DatabaseManager::tracksByDisc(int discId) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT id FROM tracks WHERE disc_id = ? AND missing = 0 "
         "ORDER BY disc_number ASC, track_number ASC"));
@@ -388,7 +421,7 @@ Result<QList<Track>> DatabaseManager::tracksByDisc(int discId) {
 }
 
 Result<void> DatabaseManager::markMissing(int trackId, bool missing) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("UPDATE tracks SET missing = ? WHERE id = ?"));
     q.addBindValue(missing ? 1 : 0);
     q.addBindValue(trackId);
@@ -405,7 +438,7 @@ Result<int> DatabaseManager::upsertDisc(Disc& disc) {
         disc.artistId = r.value();
     }
 
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "INSERT INTO discs(title, artist_id, year, type, source_path, toc_discid, "
         "mb_release_id, total_duration_ms, track_count) "
@@ -435,7 +468,7 @@ Result<int> DatabaseManager::upsertDisc(Disc& disc) {
 }
 
 Result<Disc> DatabaseManager::getDisc(int id) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT d.id, d.title, d.artist_id, d.year, d.type, d.source_path, "
         "d.toc_discid, d.mb_release_id, d.total_duration_ms, d.track_count, "
@@ -464,7 +497,7 @@ Result<Disc> DatabaseManager::getDisc(int id) {
 }
 
 Result<Disc> DatabaseManager::getDiscByDiscId(const QString& tocDiscId) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("SELECT id FROM discs WHERE toc_discid = ?"));
     q.addBindValue(tocDiscId);
     if (!q.exec() || !q.next()) {
@@ -474,7 +507,7 @@ Result<Disc> DatabaseManager::getDiscByDiscId(const QString& tocDiscId) {
 }
 
 Result<QList<Disc>> DatabaseManager::searchDiscs(const QString& query, int limit) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     if (query.isEmpty()) {
         return listDiscs(DiscType::Folder, limit);  // arbitralnie, NOTE poniżej
     }
@@ -496,7 +529,7 @@ Result<QList<Disc>> DatabaseManager::searchDiscs(const QString& query, int limit
 
 Result<QList<Disc>> DatabaseManager::listDiscs(DiscType filter, int limit) {
     qCDebug(lcDb) << "listDiscs type=" << discTypeToString(filter) << "limit=" << limit;
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT id FROM discs WHERE type = ? ORDER BY added_at DESC LIMIT ?"));
     q.addBindValue(discTypeToString(filter));
@@ -513,7 +546,7 @@ Result<QList<Disc>> DatabaseManager::listDiscs(DiscType filter, int limit) {
 }
 
 Result<QString> DatabaseManager::getSetting(const QString& key) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral("SELECT value FROM settings WHERE key = ?"));
     q.addBindValue(key);
     if (!q.exec() || !q.next()) {
@@ -523,7 +556,7 @@ Result<QString> DatabaseManager::getSetting(const QString& key) {
 }
 
 Result<void> DatabaseManager::setSetting(const QString& key, const QString& value) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "INSERT INTO settings(key, value) VALUES (?, ?) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value"));
@@ -536,7 +569,7 @@ Result<void> DatabaseManager::setSetting(const QString& key, const QString& valu
 }
 
 Result<DatabaseManager::LyricsRow> DatabaseManager::getLyrics(int trackId) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "SELECT text, synced_lrc, source FROM lyrics WHERE track_id = ?"));
     q.addBindValue(trackId);
@@ -552,7 +585,7 @@ Result<DatabaseManager::LyricsRow> DatabaseManager::getLyrics(int trackId) {
 }
 
 Result<void> DatabaseManager::setLyrics(int trackId, const LyricsRow& row) {
-    QSqlQuery q(m_db);
+    QSqlQuery q(conn());
     q.prepare(QStringLiteral(
         "INSERT INTO lyrics(track_id, text, synced_lrc, source) "
         "VALUES (?, ?, ?, ?) "
