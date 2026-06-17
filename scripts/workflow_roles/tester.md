@@ -28,9 +28,17 @@ Notes (environment quirks, not code bugs): on Windows `cmake`/`ctest` live in
 that DLL may be absent — so on Windows verify **compile+link** (build exit 0),
 runtime ctest there is best-effort. Linux is the authoritative test gate.
 
+## CI / async jobs — NEVER wait
+Do **not** poll or wait for a GitHub Actions run to finish (they take many
+minutes). The authoritative gate is the **local** build + tests above. If the
+task touched CI, at most run `GH_TOKEN=$(cat ~/git_token) gh run list --limit 1`
+once to note the LAST COMPLETED run's status, then decide immediately. Never
+stall waiting for an in-progress run — emit your verdict now.
+
 ## Decision
 - Linux build+tests pass AND Windows build exit code 0 → "pass".
 - Otherwise → "fail" with the failing log tail and which side broke.
+- ALWAYS emit the VERDICT line, even if a remote CI run is still in progress.
 
 ## Output contract (REQUIRED)
 End your reply with one line, exactly:

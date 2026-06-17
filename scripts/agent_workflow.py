@@ -219,7 +219,13 @@ def build_prompt(role: str, state: dict) -> str:
         if fb:
             parts.append("FEEDBACK you MUST address from the previous stage:")
             parts.append(fb)
-    parts.append("Remember to end with the required `===VERDICT=== {json}` line.")
+    parts.append(
+        "CRITICAL: end your reply with EXACTLY ONE line "
+        "`===VERDICT=== {json}` — always, no matter what. Never wait or poll for "
+        "long-running EXTERNAL jobs (e.g. a remote GitHub Actions run that takes "
+        "many minutes); do your local work, report your best current assessment in "
+        "the verdict, and let the supervisor decide. Do not stall waiting for async "
+        "results — a reply without a VERDICT line is a failure.")
     return "\n\n".join(parts)
 
 
@@ -447,15 +453,32 @@ def run_loop(once: bool, dry_run: bool, max_iterations: int | None) -> int:
 
         if not res["ok"] or res["verdict"] is None:
             err = res.get("error", "unknown")
-            # One soft retry for a malformed/no-verdict reply, else escalate.
-            set_status(state, f"{stage.upper()} produced no usable VERDICT ({err}); retrying once")
-            res = run_agent(stage, state)
+            # Retry a few times; a limit mid-retry is handled by waiting.
+            for _ in range(2):
+                set_status(state, f"{stage.upper()} produced no usable VERDICT ({err}); retrying")
+                res = run_agent(stage, state)
+                if res["limit"]:
+                    backoff = wait_for_tokens(state, res["reset"], backoff)
+                    res = run_agent(stage, state)
+                if res["ok"] and res["verdict"] is not None:
+                    break
             if not res["ok"] or res["verdict"] is None:
-                state["status"] = "error"
-                state["feedback"] = f"{stage} failed to produce a VERDICT ({err})."
+                # Keep the loop alive instead of hard-stopping: bounce the work
+                # back (bounded by MAX_ATTEMPTS) with a corrective note. Only the
+                # architect (the planner) is treated as fatal if it can't speak.
+                if stage == "architect":
+                    state["status"] = "error"
+                    state["feedback"] = "architect produced no VERDICT."
+                    save_state(state)
+                    set_status(state, "ERROR: architect gave no VERDICT. See transcripts/. Stopping.")
+                    return 1
+                state["feedback"] = (f"The previous {stage} reply had NO VERDICT line. "
+                                     "Redo the work and end with exactly one "
+                                     "`===VERDICT=== {json}` line; never wait on async CI.")
+                set_status(state, f"{stage.upper()} gave no VERDICT after retries; bouncing to programmer")
+                _bounce(state, "programmer")
                 save_state(state)
-                set_status(state, f"ERROR: {stage} gave no VERDICT twice. See transcripts/. Stopping.")
-                return 1
+                continue
 
         verdict = res["verdict"]
         set_status(state, f"{stage.upper()} verdict: {json.dumps(verdict, ensure_ascii=False)[:200]}")
