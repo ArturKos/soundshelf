@@ -42,3 +42,12 @@ soundshelf_add_test(test_play_history         test_play_history.cpp)
 soundshelf_add_test(test_folder_watcher       test_folder_watcher.cpp)
 soundshelf_add_test(test_http_range           test_http_range.cpp)
 soundshelf_add_test(test_format_converter     test_format_converter.cpp)
+
+# End-to-end CLI test: drives the actual soundshelf-cli binary via QProcess.
+# Guarded by SOUNDSHELF_BUILD_CLI because it references the soundshelf-cli target.
+if(SOUNDSHELF_BUILD_CLI)
+    soundshelf_add_test(test_cli test_cli.cpp)
+    target_compile_definitions(test_cli PRIVATE
+        "SOUNDSHELF_CLI_EXE=\"$<TARGET_FILE:soundshelf-cli>\"")
+    add_dependencies(test_cli soundshelf-cli)
+endif()
