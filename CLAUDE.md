@@ -316,11 +316,12 @@ Global hotkeys (system-wide, można wyłączyć):
 
 ---
 
-## Status implementacji (na 2026-06-16)
+## Status implementacji (na 2026-06-17)
 
 > Stan po fazach A/B/C + faza D (ReplayGain, AcoustID, EQ presety, spektrum FFT,
 > crossfade, dokończone komendy CLI) i ścieżce build Windows (vcpkg + MSVC static).
 > Cross-platform compile + testy zweryfikowane na Linux i Windows 10.
+> D3 naprawione: EQ audio filter chain format dla mpv (lavfi=[...]).
 
 | Moduł | Status |
 |---|---|
@@ -344,7 +345,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | `io::PodcastFeedParser` (feature #12 parser) | **działa** — RSS 2.0 + iTunes namespace → `Feed`/`Episode` structs; `parseFile`, `parseBytes`, `parseItunesDuration` (z testem) |
 | `data::PodcastStore` + migration 007 (feature #12 DB) | **działa** — `podcast_feeds` + `podcast_episodes` tables, migration 007, `subscribe`/`updateFeedMetadata`/`upsertEpisodes`/`episodesForFeed`/`episode`/`setPlayed`/`setLocalPath`/`unsubscribe` (z testem) |
 | `core::PodcastManager` (feature #12 orchestration) | **działa** — `subscribe`/`refreshFeed`/`refreshAll`/`downloadEpisode`; injectable `FeedFetcher` dla testów (stub bez sieci); signals: `feedRefreshed`, `episodeDownloaded`, `errorOccurred`; logging `soundshelf.podcast.manager`; default fetcher blokuje na `RestClient::getBytes().result()` — wywoływać z wątku roboczego lub CLI (z testem). *Integracja z GUI (wątek/QtConcurrent) = future work* |
-| PlayerEngine (libmpv) | **działa** — play/seek/vol/auto-advance, presety EQ z JSON, spektrum FFT (FFTW3), crossfade (fade-out przez `Crossfader`). *Future work:* prawdziwy overlap (2. instancja mpv) i PCM tap z libmpv zasilający spektrum w czasie rzeczywistym |
+| PlayerEngine (libmpv) | **działa** — play/seek/vol/auto-advance, EQ z poprawnym `af=lavfi=[...]` (D3 fixed), ReplayGain volume blend, presety EQ z JSON, spektrum FFT (FFTW3), crossfade (fade-out przez `Crossfader`). *Future work:* prawdziwy overlap (2. instancja mpv) i PCM tap z libmpv zasilający spektrum w czasie rzeczywistym |
 | MainWindow + UI | **wpięte end-to-end** (import → biblioteka → playback); większość widgetów ma realny kod |
 | MPRIS adapter | **działa** (Linux/QtDBus) |
 | HTTP server (headless `--serve`) | **działa** — `main.cpp --serve --port`, Bearer token, REST przez `HttpServer`; `/api/v1/stream/<id>` obsługuje HTTP Range (RFC 7233): 206 Partial Content via pure `network::HttpRange` (None→200+Accept-Ranges, Satisfiable→206+Content-Range, Unsatisfiable→416, Malformed→200 fallback) (z testem) |
@@ -358,7 +359,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**, **remote list/get/url**). `next/prev/daemon` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work. Globalne flagi `--server`/`--token` dla komendy `remote`. |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 29 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, test_database_discs, test_lrc_parser, test_play_history, test_folder_watcher, **test_http_range**) |
+| Testy | 30 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, test_database_discs, test_lrc_parser, test_play_history, test_folder_watcher, test_http_range, **test_audio_filter_chain**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)
