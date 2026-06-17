@@ -175,6 +175,9 @@ Result<void> PlayerEngine::playFile(const QString& path) {
         return Result<void>::err(Error::Unknown, QStringLiteral("mpv loadfile failed"));
     }
 
+    // Re-apply after loadfile so the filter chain survives the track change.
+    applyAudioFilters();
+
     m_state = PlayerState::Playing;
     m_trackStartedMs = QDateTime::currentMSecsSinceEpoch();
     emit stateChanged(m_state);
@@ -336,33 +339,49 @@ void PlayerEngine::setShuffle(bool shuffle) {
     m_shuffle = shuffle;
 }
 
+QString PlayerEngine::buildAudioFilterChain(bool eqEnabled,
+                                             const QVector<double>& eqGains,
+                                             double replayGainDb) {
+    QStringList terms;
+    if (eqEnabled) {
+        for (int i = 0; i < EQ_BANDS && i < eqGains.size(); ++i) {
+            if (qFuzzyIsNull(eqGains[i])) continue;
+            terms << QStringLiteral("equalizer=f=%1:width_type=q:width=1.0:gain=%2")
+                        .arg(static_cast<int>(EQ_FREQS[i]))
+                        .arg(eqGains[i], 0, 'f', 1);
+        }
+    }
+    if (!qFuzzyIsNull(replayGainDb)) {
+        terms << QStringLiteral("volume=%1dB").arg(replayGainDb, 0, 'f', 2);
+    }
+    if (terms.isEmpty()) return {};
+    return QStringLiteral("lavfi=[%1]").arg(terms.join(QChar(',')));
+}
+
 QString PlayerEngine::buildAudioFilterChain() const {
-    QStringList filters;
+    double rgDb = 0.0;
     if (m_rgEnabled && m_currentTrack.isValid()) {
-        const double gain = m_currentTrack.effectiveReplayGainDb(m_rgAlbumMode);
-        if (gain != 0.0) {
-            // mpv volume filter, ReplayGain w dB
-            filters << QStringLiteral("lavfi=[volume=%1dB]").arg(gain, 0, 'f', 2);
-        }
+        rgDb = m_currentTrack.effectiveReplayGainDb(m_rgAlbumMode);
     }
-    if (m_eqEnabled) {
-        for (int i = 0; i < EQ_BANDS; ++i) {
-            if (qFuzzyIsNull(m_eqGains[i])) continue;
-            filters << QStringLiteral("lavfi=[equalizer=f=%1:t=q:w=1.0:g=%2]")
-                .arg(EQ_FREQS[i], 0, 'f', 0)
-                .arg(m_eqGains[i], 0, 'f', 1);
-        }
-    }
-    return filters.join(QChar(','));
+    return buildAudioFilterChain(m_eqEnabled, m_eqGains, rgDb);
 }
 
 void PlayerEngine::applyAudioFilters() {
     if (!m_mpv) return;
     const QString chain = buildAudioFilterChain();
+    int rc;
     if (chain.isEmpty()) {
-        mpv_set_property_string(asMpv(m_mpv), "af", "");
+        rc = mpv_set_property_string(asMpv(m_mpv), "af", "");
+        if (rc < 0)
+            qCWarning(lcPlayer) << "Failed to clear af:" << mpv_error_string(rc);
+        else
+            qCDebug(lcPlayer) << "Cleared audio filter chain";
     } else {
-        mpv_set_property_string(asMpv(m_mpv), "af", chain.toUtf8().constData());
+        rc = mpv_set_property_string(asMpv(m_mpv), "af", chain.toUtf8().constData());
+        if (rc < 0)
+            qCWarning(lcPlayer) << "Failed to set af:" << mpv_error_string(rc) << "chain:" << chain;
+        else
+            qCDebug(lcPlayer) << "Applied audio filter chain:" << chain;
     }
 }
 

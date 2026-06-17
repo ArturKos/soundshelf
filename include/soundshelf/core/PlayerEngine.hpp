@@ -98,6 +98,30 @@ public:
                                           int bars,
                                           int sampleRate = 44100);
 
+    /// Builds the mpv @c af property string for the given EQ and ReplayGain state.
+    /// Returns an empty string when no filter is active; the caller should then
+    /// clear the @c af property (pass @c "" to mpv).
+    ///
+    /// The returned string is a single @c lavfi=[] node wrapping a comma-separated
+    /// libavfilter graph:
+    ///   - Per active EQ band (gain != 0):
+    ///       @c equalizer=f=<Hz>:width_type=q:width=1.0:gain=<dB>
+    ///     Frequencies are taken from EQ_FREQS in order; bands with zero gain
+    ///     (@c qFuzzyIsNull) are omitted.
+    ///   - ReplayGain / volume correction (@p replayGainDb != 0):
+    ///       @c volume=<dB>dB  (formatted to two decimal places, e.g. @c volume=-6.50dB)
+    ///     appended at the end of the graph.
+    ///
+    /// @param eqEnabled     Whether the equalizer is active.
+    /// @param eqGains       Per-band gains in dB (EQ_BANDS entries, expected
+    ///                      clamped to −12 .. +12 by the caller).
+    /// @param replayGainDb  Volume correction in dB for ReplayGain/normalization.
+    ///                      Pass 0.0 to omit the volume term.
+    /// @return mpv @c af value string, or an empty QString when nothing is active.
+    static QString buildAudioFilterChain(bool eqEnabled,
+                                         const QVector<double>& eqGains,
+                                         double replayGainDb);
+
 signals:
     void stateChanged(PlayerState state);
     void trackChanged(const Track& track);
