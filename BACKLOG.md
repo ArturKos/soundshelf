@@ -65,6 +65,8 @@ Pick these in order. They ARE in scope and gate completion.
 |---|------|--------|
 | D1 | **Fix GitHub Actions CI** — it currently fails on *every* commit. Investigate `.github/workflows/ci.yml` and the failing runs (`GH_TOKEN=$(cat ~/git_token) gh run list` / `gh run view <id> --log-failed`), find the real cause, and fix the workflow so both the Linux and Windows jobs pass. Verify by checking a fresh run after the fix is pushed. | ✅ |
 | D2 | **CLI test suite covering all functionality** — add automated tests that exercise every `soundshelf-cli` subcommand (play/pause/resume/stop/seek/volume/status, import/list/search/info, tag, disc list/search/add/tracks/play, replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db migrate/vacuum/info, podcast, remote, serve, plugin). Build a harness that runs the **built** `soundshelf-cli` against a temp DB + generated audio fixtures (ffmpeg) and asserts expected output / exit codes. Register it so `ctest` runs it; must pass on Linux. | ✅ |
+| D3 | **Equalizer has no audible effect** — the UI is correctly wired (EqualizerWidget→PlayerEngine `setEqualizerBand`/`setEqualizerEnabled`/`setEqualizerPreset`, `attachEngine` in MainWindow), so the bug is in PlayerEngine's mpv audio-filter chain (`buildAudioFilterChain`/`applyAudioFilters`). Verify the `af` string mpv actually accepts — the current `lavfi=[equalizer=f=..:t=q:w=..:g=..]` form is suspect; mpv may need `af=equalizer=...` or `firequalizer`/`anequalizer`. Confirm `mpv_set_property("af", …)` returns no error, and that the chain is re-applied after every `loadfile`. Add a unit test asserting `buildAudioFilterChain()` yields the expected mpv-valid string for given bands/preset. **Verification:** the loop validates the filter string + that setting the mpv `af` property logs no error; audible confirmation is the human's (not an autonomous gate). | ⬜ |
+| D4 | **Spectrum shows nothing** — `PlayerEngine::pushVisualizationPcm()` is never called by anything, so `spectrumData()` always returns zeros and SpectrumWidget draws an empty field. Wire a **live PCM source** feeding the visualizer during playback. libmpv has no direct PCM callback, so a workable approach: a lightweight parallel `io::PcmDecoder` stream of the current file advanced in step with `PlayerEngine::positionMs()`, pushing frames via `pushVisualizationPcm()` on a timer, reset on track change / pause / stop. **Verification:** the loop confirms the seam fires (a test where, given a decodable file + simulated position, `spectrumData()` becomes non-zero); the live on-screen bars are the human's to confirm. | ⬜ |
 
 ## C. Out of scope — DO NOT implement (autonomously unverifiable / future work)
 
@@ -72,8 +74,6 @@ These require hardware, a running GUI/display, deploy artifacts, or are explicit
 "future work". They are **not** backlog tasks and must not be picked:
 
 - True simultaneous-overlap crossfade via a 2nd libmpv handle.
-- Real-time libmpv PCM tap feeding the live visualizer (`pushVisualizationPcm`
-  is the seam; wiring the tap needs a running audio device).
 - Winamp vis `*.dll` runtime test (needs a Windows GUI session + a sample DLL +
   deployed `libmpv-2.dll`).
 - Windows SMTC (System Media Transport Controls) — Windows-only, needs a desktop session.
