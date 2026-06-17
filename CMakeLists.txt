@@ -226,6 +226,7 @@ set(SS_CORE_SOURCES
     src/core/Crossfader.cpp
     src/core/MprisAdapter.cpp
     src/core/PodcastManager.cpp
+    src/core/VisualizationFeeder.cpp
 )
 
 set(SS_IO_SOURCES

@@ -33,6 +33,7 @@
 #include "soundshelf/ui/ConverterDialog.hpp"
 #include "soundshelf/ui/DiscReadDialog.hpp"
 #include "soundshelf/ui/TrayIcon.hpp"
+#include "soundshelf/core/VisualizationFeeder.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -93,6 +94,10 @@ MainWindow::MainWindow(QWidget* parent)
     }
 
     setupUi();
+
+    m_visFeeder = new VisualizationFeeder(this);
+    m_visFeeder->attachEngine(m_engine);
+
     setupMenus();
     setupStatusBar();
     setupTray();

@@ -28,6 +28,7 @@ class MusicBrainzClient;
 class CoverArtClient;
 class LyricsClient;
 class DiscEnricher;
+class VisualizationFeeder;
 struct Track;
 
 /**
@@ -110,7 +111,8 @@ private:
     MusicBrainzClient*  m_musicbrainz = nullptr;
     CoverArtClient*     m_coverArt = nullptr;
     LyricsClient*       m_lyricsClient = nullptr;
-    DiscEnricher*       m_enricher = nullptr;
+    DiscEnricher*         m_enricher = nullptr;
+    VisualizationFeeder*  m_visFeeder = nullptr;
 };
 
 } // namespace soundshelf
