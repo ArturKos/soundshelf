@@ -323,11 +323,13 @@ Global hotkeys (system-wide, można wyłączyć):
 > Cross-platform compile + testy zweryfikowane na Linux i Windows 10.
 > D3 naprawione: EQ audio filter chain format dla mpv (lavfi=[...]).
 > D5 complete: Library sources panel dla folder organization.
+> D6 complete: Batch operations (checkboxes, copy/delete/remove files) na sources & tracks.
 
 | Moduł | Status |
 |---|---|
 | Schema bazy + migracje | **działa** — migracje 001–009 (replaygain, acoustid, smart_playlists, play_history, bookmarks, podcasts, **fts_contentless_sync**, **library_sources**), `SchemaMigrator` + `DatabaseManager` pełne; `listDiscs` filtruje po typie (WHERE type=?); migration 008 fixes contentless FTS5 DELETE bug (tracks_ad/au, discs_ad/au) using the 'delete' special-insert idiom; migration 009 adds library_sources table + tracks.source_id FK |
 | Library sources panel (D5) | **działa** — `SourceInfo` struct, `ensureSource`/`listSources`/`renameSource`/`removeSource`/`tracksBySource`, `SourcesModel` QAbstractListModel z synthetic 'All music' row, MainWindow sources panel left-docked z filter integracji (z testem) |
+| Batch track operations (D6) | **działa** — `DatabaseManager::removeTrack`/`removeTracks` (DELETE triggers FTS sync), `core::BatchTrackOps` (copyToFolder/removeFromLibrary/deleteFiles), UI checkbox support (`Qt::ItemIsUserCheckable` + `checkedTrackIds()`/`selectAll`/`selectNone`/`invertSelection`), toolbar+context menu (Copy to folder, Remove from library, Delete files, Add to playlist, Edit tags, Convert) (z testem) |
 | TagInfo (TagLib wrapper) | **działa** (read+write, encoding fallback) |
 | DiscReader — `FolderReader` | **działa** |
 | `core::FolderWatcher` (feature #3) | **działa** — recursive `QFileSystemWatcher`-based auto-import; pure static helpers `scanAudioFiles` (non-recursive, sorted, extension-filtered) and `diffFiles` (set diff, sorted output) extracted for testability; `onDirectoryChanged` composed from helpers; debounce 500 ms; `addRoot`/`removeRoot`/`setPaused`/`filesAdded`/`filesRemoved` (z testem) |
@@ -361,7 +363,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | Visualization plugins (Winamp adapter) | **kompiluje się** (oba OS); realny test na `vis_*.dll` wymaga sprzętu Windows + przykładowej DLL (manualny) |
 | CLI (`soundshelf-cli`) | **działa** — wszystkie komendy okablowane do backendów (replaygain, fingerprint, convert, duplicates, playlist, export, stats, scrobble, db, disc add/tracks/play, plugin, serve, **podcast list/subscribe/refresh/episodes/download/played/unsubscribe**, **remote list/get/url**). `next/prev/daemon` i `disc rip/lookup` dają uczciwy komunikat (wymagają działającej instancji / sprzętu); IPC do GUI = future work. Globalne flagi `--server`/`--token` dla komendy `remote`. |
 | Build / CI | **działa** — CMake + presety, vcpkg/MSVC static (Windows), GitHub Actions (Linux+Windows). vcpkg: `libebur128` (find_path fallback), `FFTW3f` (osobny pakiet single-precision) |
-| Testy | 31 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, test_database_discs, test_lrc_parser, test_play_history, test_folder_watcher, test_http_range, **test_audio_filter_chain**, **test_library_sources**) |
+| Testy | 32 plików (cue +4 multi-file cases, duplicate, fts5, lastfm_sign, playlist_io, pure_helpers, smart_playlist, taginfo, track_format, translator, pcm_decoder, replaygain, fingerprint, eq_presets, spectrum, accuraterip, bookmark_store, podcast_feed_parser, podcast_store, podcast_manager, test_cli_podcast, test_musicbrainz_submitter, test_library_io, test_remote_client, test_database_discs, test_lrc_parser, test_play_history, test_folder_watcher, test_http_range, test_audio_filter_chain, test_library_sources, **test_batch_track_ops**) |
 
 **Następne kroki / co zostało (future work):**
 - PlayerEngine: prawdziwy overlap crossfade (2. instancja mpv); PCM tap z libmpv zasilający `spectrumData`/wizualizacje w czasie rzeczywistym (dziś `pushVisualizationPcm` trzeba zasilić ręcznie)

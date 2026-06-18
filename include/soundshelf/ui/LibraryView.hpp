@@ -30,8 +30,26 @@ public:
     /// Replaces the model contents with @p tracks.
     void setTracks(const QList<Track>& tracks);
 
-    /// Currently selected track ids.
+    /// Currently selected track ids (row selection, not checkboxes).
     QList<int> selectedTrackIds() const;
+
+    /**
+     * @brief Ids of all tracks whose checkbox is checked.
+     *
+     * The checked set is independent of the row selection — users can
+     * select a different row for playback while still having a separate
+     * checked set for batch operations.
+     */
+    QList<int> checkedTrackIds() const;
+
+    /// Check all visible rows.
+    void selectAll();
+
+    /// Uncheck all visible rows.
+    void selectNone();
+
+    /// Toggle the checked state of every visible row.
+    void invertSelection();
 
     /// All tracks currently shown (in the order they were last set).
     /// Used by the host to push a queue into PlaylistManager.

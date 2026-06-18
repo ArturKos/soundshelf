@@ -35,6 +35,7 @@
 #include "soundshelf/ui/TrayIcon.hpp"
 #include "soundshelf/ui/SourcesModel.hpp"
 #include "soundshelf/core/VisualizationFeeder.hpp"
+#include "soundshelf/core/BatchTrackOps.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -208,6 +209,145 @@ void MainWindow::setupUi() {
     m_player->attachEngine(m_engine);
     m_spectrum->attachEngine(m_engine);
     m_eq->attachEngine(m_engine);
+
+    // ---- Batch operations toolbar ----
+    auto* batchBar = addToolBar(tr("Batch operations"));
+    batchBar->setObjectName(QStringLiteral("BatchToolBar"));
+
+    auto* actSelectAll = new QAction(tr("Select all"), this);
+    auto* actSelectNone = new QAction(tr("Select none"), this);
+    auto* actInvert = new QAction(tr("Invert"), this);
+    connect(actSelectAll,  &QAction::triggered, this, [this]{ if (m_libraryView) m_libraryView->selectAll();  });
+    connect(actSelectNone, &QAction::triggered, this, [this]{ if (m_libraryView) m_libraryView->selectNone(); });
+    connect(actInvert,     &QAction::triggered, this, [this]{ if (m_libraryView) m_libraryView->invertSelection(); });
+    batchBar->addAction(actSelectAll);
+    batchBar->addAction(actSelectNone);
+    batchBar->addAction(actInvert);
+    batchBar->addSeparator();
+
+    auto* actCopyToFolder = new QAction(tr("Copy to folder…"), this);
+    connect(actCopyToFolder, &QAction::triggered, this, [this] {
+        if (!m_libraryView) return;
+        const auto ids = m_libraryView->checkedTrackIds();
+        if (ids.isEmpty()) { statusBar()->showMessage(tr("No tracks checked."), 2000); return; }
+        const QString dest = QFileDialog::getExistingDirectory(this, tr("Copy checked tracks to folder"));
+        if (dest.isEmpty()) return;
+        QList<Track> tracks;
+        auto& dbm = DatabaseManager::instance();
+        for (int id : ids) { if (auto t = dbm.getTrack(id); t) tracks << t.value(); }
+        auto r = BatchTrackOps::copyToFolder(tracks, dest);
+        if (!r) { QMessageBox::warning(this, tr("Copy failed"), r.error().message); return; }
+        statusBar()->showMessage(tr("Copied %1 file(s).").arg(r.value()), 4000);
+    });
+    batchBar->addAction(actCopyToFolder);
+
+    auto* actRemoveFromLib = new QAction(tr("Remove from library"), this);
+    connect(actRemoveFromLib, &QAction::triggered, this, [this] {
+        if (!m_libraryView) return;
+        const auto ids = m_libraryView->checkedTrackIds();
+        if (ids.isEmpty()) { statusBar()->showMessage(tr("No tracks checked."), 2000); return; }
+        auto r = BatchTrackOps::removeFromLibrary(DatabaseManager::instance(), ids);
+        if (!r) { QMessageBox::warning(this, tr("Remove failed"), r.error().message); return; }
+        statusBar()->showMessage(tr("Removed %1 track(s) from library.").arg(r.value()), 4000);
+        reloadLibrary();
+    });
+    batchBar->addAction(actRemoveFromLib);
+
+    auto* actDeleteFiles = new QAction(tr("Delete files…"), this);
+    connect(actDeleteFiles, &QAction::triggered, this, [this] {
+        if (!m_libraryView) return;
+        const auto ids = m_libraryView->checkedTrackIds();
+        if (ids.isEmpty()) { statusBar()->showMessage(tr("No tracks checked."), 2000); return; }
+        if (QMessageBox::question(this, tr("Delete files"),
+                tr("Permanently delete %n file(s) from disk?", nullptr, ids.size()),
+                QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes) return;
+        auto r = BatchTrackOps::deleteFiles(DatabaseManager::instance(), ids);
+        if (!r) { QMessageBox::warning(this, tr("Delete failed"), r.error().message); return; }
+        statusBar()->showMessage(tr("Deleted %1 file(s).").arg(r.value()), 4000);
+        reloadLibrary();
+    });
+    batchBar->addAction(actDeleteFiles);
+
+    auto* actAddToQueue = new QAction(tr("Add to queue"), this);
+    connect(actAddToQueue, &QAction::triggered, this, [this] {
+        if (!m_libraryView || !m_playlistMgr) return;
+        const auto ids = m_libraryView->checkedTrackIds();
+        if (ids.isEmpty()) { statusBar()->showMessage(tr("No tracks checked."), 2000); return; }
+        auto& dbm = DatabaseManager::instance();
+        int added = 0;
+        for (int id : ids) {
+            if (auto t = dbm.getTrack(id); t) {
+                m_playlistMgr->appendToQueue(t.value());
+                ++added;
+            }
+        }
+        statusBar()->showMessage(tr("Added %1 track(s) to queue.").arg(added), 2000);
+    });
+    batchBar->addAction(actAddToQueue);
+
+    batchBar->addSeparator();
+
+    auto* actBatchTags = new QAction(tr("Edit tags…"), this);
+    connect(actBatchTags, &QAction::triggered, this, [this] {
+        auto* dlg = new BatchTagEditor;
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setWindowFlags(Qt::Window);
+        dlg->setWindowTitle(tr("Batch tag editor"));
+        QList<Track> sel;
+        const auto ids = m_libraryView ? m_libraryView->checkedTrackIds()
+                                       : QList<int>{};
+        auto& dbm = DatabaseManager::instance();
+        for (int id : ids) { if (auto t = dbm.getTrack(id); t) sel << t.value(); }
+        if (sel.isEmpty()) {
+            for (int id : (m_libraryView ? m_libraryView->selectedTrackIds() : QList<int>{}))
+                if (auto t = dbm.getTrack(id); t) sel << t.value();
+        }
+        dlg->setTracks(sel);
+        dlg->show();
+    });
+    batchBar->addAction(actBatchTags);
+
+    auto* actBatchConvert = new QAction(tr("Convert…"), this);
+    connect(actBatchConvert, &QAction::triggered, this, [this] {
+        auto* dlg = new ConverterDialog;
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->setWindowFlags(Qt::Window);
+        dlg->setWindowTitle(tr("Format converter"));
+        QList<Track> sel;
+        const auto ids = m_libraryView ? m_libraryView->checkedTrackIds()
+                                       : QList<int>{};
+        auto& dbm = DatabaseManager::instance();
+        for (int id : ids) { if (auto t = dbm.getTrack(id); t) sel << t.value(); }
+        if (sel.isEmpty()) {
+            for (int id : (m_libraryView ? m_libraryView->selectedTrackIds() : QList<int>{}))
+                if (auto t = dbm.getTrack(id); t) sel << t.value();
+        }
+        dlg->setTracks(sel);
+        dlg->show();
+    });
+    batchBar->addAction(actBatchConvert);
+
+    // ---- Library view context menu ----
+    m_libraryView->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_libraryView, &QWidget::customContextMenuRequested,
+            this, [this, actCopyToFolder, actRemoveFromLib, actDeleteFiles,
+                        actAddToQueue, actBatchTags, actBatchConvert,
+                        actSelectAll, actSelectNone, actInvert](const QPoint& pos) {
+        QMenu menu(this);
+        menu.addAction(actSelectAll);
+        menu.addAction(actSelectNone);
+        menu.addAction(actInvert);
+        menu.addSeparator();
+        menu.addAction(actCopyToFolder);
+        menu.addAction(actRemoveFromLib);
+        menu.addAction(actDeleteFiles);
+        menu.addSeparator();
+        menu.addAction(actAddToQueue);
+        menu.addSeparator();
+        menu.addAction(actBatchTags);
+        menu.addAction(actBatchConvert);
+        menu.exec(m_libraryView->mapToGlobal(pos));
+    });
 }
 
 void MainWindow::setupMenus() {

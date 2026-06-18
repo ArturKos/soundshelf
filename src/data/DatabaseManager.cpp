@@ -420,6 +420,50 @@ Result<QList<Track>> DatabaseManager::listTracks(int limit, int offset) {
     return Result<QList<Track>>::ok(out);
 }
 
+Result<void> DatabaseManager::removeTrack(int id) {
+    QSqlQuery q(conn());
+    q.prepare(QStringLiteral("DELETE FROM tracks WHERE id = ?"));
+    q.addBindValue(id);
+    if (!q.exec()) {
+        return Result<void>::err(Error::DatabaseError,
+            QStringLiteral("removeTrack: %1").arg(q.lastError().text()));
+    }
+    qCDebug(lcDb) << "removeTrack: id=" << id;
+    return Result<void>::ok();
+}
+
+Result<int> DatabaseManager::removeTracks(const QList<int>& ids) {
+    if (ids.isEmpty()) return Result<int>::ok(0);
+
+    QSqlDatabase db = conn();
+    if (!db.transaction()) {
+        return Result<int>::err(Error::DatabaseError,
+            QStringLiteral("removeTracks: begin transaction: %1").arg(db.lastError().text()));
+    }
+
+    int removed = 0;
+    QSqlQuery q(db);
+    q.prepare(QStringLiteral("DELETE FROM tracks WHERE id = ?"));
+    for (int id : ids) {
+        q.bindValue(0, id);
+        if (!q.exec()) {
+            db.rollback();
+            return Result<int>::err(Error::DatabaseError,
+                QStringLiteral("removeTracks: %1").arg(q.lastError().text()));
+        }
+        removed += q.numRowsAffected();
+    }
+
+    if (!db.commit()) {
+        db.rollback();
+        return Result<int>::err(Error::DatabaseError,
+            QStringLiteral("removeTracks: commit: %1").arg(db.lastError().text()));
+    }
+
+    qCDebug(lcDb) << "removeTracks: removed" << removed << "of" << ids.size();
+    return Result<int>::ok(removed);
+}
+
 Result<void> DatabaseManager::updatePlayCount(int trackId) {
     QSqlQuery q(conn());
     q.prepare(QStringLiteral(

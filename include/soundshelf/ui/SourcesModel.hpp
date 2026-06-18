@@ -32,6 +32,12 @@ public:
     /// Remove the source at @p row (rows > 0 only). Returns false on failure.
     bool removeAt(int row);
 
+    /// Returns the checked state for @p row (rows > 0 only).
+    bool isChecked(int row) const;
+
+    /// Returns the source ids of all checked rows (row 0 / "All music" excluded).
+    QList<int> checkedSourceIds() const;
+
     // QAbstractListModel interface
     int      rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
@@ -41,6 +47,7 @@ public:
 
 private:
     QList<DatabaseManager::SourceInfo> m_sources;
+    QList<bool>                        m_checked;  ///< parallel to m_sources
 };
 
 } // namespace soundshelf

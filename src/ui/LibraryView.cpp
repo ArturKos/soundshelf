@@ -78,8 +78,12 @@ void LibraryView::setTracks(const QList<Track>& tracks) {
     m_tracks = tracks;
     m_model->removeRows(0, m_model->rowCount());
     for (const auto& t : tracks) {
+        auto* numItem = new QStandardItem(QString::number(t.trackNumber));
+        numItem->setData(Qt::Unchecked, Qt::CheckStateRole);
+        numItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
+
         QList<QStandardItem*> row;
-        row << new QStandardItem(QString::number(t.trackNumber))
+        row << numItem
             << new QStandardItem(t.title)
             << new QStandardItem(t.artist)
             << new QStandardItem(t.album)
@@ -97,6 +101,43 @@ QList<int> LibraryView::selectedTrackIds() const {
         if (row >= 0 && row < m_tracks.size()) ids << m_tracks[row].id;
     }
     return ids;
+}
+
+QList<int> LibraryView::checkedTrackIds() const {
+    QList<int> ids;
+    const int rows = m_model->rowCount();
+    for (int r = 0; r < rows; ++r) {
+        const auto* item = m_model->item(r, 0);
+        if (item && item->checkState() == Qt::Checked && r < m_tracks.size())
+            ids << m_tracks[r].id;
+    }
+    return ids;
+}
+
+void LibraryView::selectAll() {
+    const int rows = m_model->rowCount();
+    for (int r = 0; r < rows; ++r) {
+        if (auto* item = m_model->item(r, 0))
+            item->setCheckState(Qt::Checked);
+    }
+}
+
+void LibraryView::selectNone() {
+    const int rows = m_model->rowCount();
+    for (int r = 0; r < rows; ++r) {
+        if (auto* item = m_model->item(r, 0))
+            item->setCheckState(Qt::Unchecked);
+    }
+}
+
+void LibraryView::invertSelection() {
+    const int rows = m_model->rowCount();
+    for (int r = 0; r < rows; ++r) {
+        if (auto* item = m_model->item(r, 0)) {
+            item->setCheckState(item->checkState() == Qt::Checked
+                ? Qt::Unchecked : Qt::Checked);
+        }
+    }
 }
 
 } // namespace soundshelf

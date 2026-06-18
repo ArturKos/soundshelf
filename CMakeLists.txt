@@ -227,6 +227,7 @@ set(SS_CORE_SOURCES
     src/core/MprisAdapter.cpp
     src/core/PodcastManager.cpp
     src/core/VisualizationFeeder.cpp
+    src/core/BatchTrackOps.cpp
 )
 
 set(SS_IO_SOURCES

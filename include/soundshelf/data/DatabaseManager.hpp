@@ -70,6 +70,28 @@ public:
     Result<QList<Track>> searchTracks(const QString& query, int limit = 100);
     Result<QList<Track>> listTracks(int limit = 1000, int offset = 0);
     Result<void> updatePlayCount(int trackId);
+
+    /**
+     * @brief Delete a single track row by @p id.
+     *
+     * The `tracks_ad` AFTER DELETE trigger (migration 008) keeps
+     * `tracks_fts` in sync automatically — no manual FTS DELETE needed.
+     *
+     * @return Result<void>::ok() on success; Err when the query fails.
+     */
+    Result<void> removeTrack(int id);
+
+    /**
+     * @brief Delete multiple track rows in a single transaction.
+     *
+     * Each row is removed via the same trigger path as @ref removeTrack.
+     * On any per-row failure the transaction is rolled back and an Err is
+     * returned.
+     *
+     * @param ids  Track ids to delete (empty list is a no-op returning 0).
+     * @return Number of rows actually removed on success, Err on failure.
+     */
+    Result<int> removeTracks(const QList<int>& ids);
     /// Writes ReplayGain values for a track. Pass std::nullopt to leave a
     /// column untouched (e.g. track-only analysis leaves album_* alone).
     Result<void> updateReplayGain(int trackId,
