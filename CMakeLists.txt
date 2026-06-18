@@ -228,6 +228,7 @@ set(SS_CORE_SOURCES
     src/core/PodcastManager.cpp
     src/core/VisualizationFeeder.cpp
     src/core/BatchTrackOps.cpp
+    src/core/MetadataResolver.cpp
 )
 
 set(SS_IO_SOURCES

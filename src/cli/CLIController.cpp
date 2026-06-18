@@ -9,6 +9,7 @@
 #include "soundshelf/core/Scrobbler.hpp"
 #include "soundshelf/core/ReplayGainAnalyzer.hpp"
 #include "soundshelf/core/ChromaprintEngine.hpp"
+#include "soundshelf/core/MetadataResolver.hpp"
 #include "soundshelf/core/PodcastManager.hpp"
 #include "soundshelf/network/AcoustIDClient.hpp"
 #include "soundshelf/network/RemoteClient.hpp"
@@ -99,6 +100,7 @@ void printUsage() {
         "  tag show <id|path>\n"
         "  tag set <id|path> --title \"X\" --artist \"Y\"\n"
         "  tag fetch <id> --source musicbrainz|acoustid\n"
+        "  tags sync [--all | --missing | <id>]  Fill missing metadata from filename / AcoustID\n"
         "\n"
         "Other commands:\n"
         "  replaygain <id|path|--all>\n"
@@ -206,6 +208,7 @@ int CLIController::run(const QStringList& args) {
     else if (cmd == "search")      return cmdSearch(sub);
     else if (cmd == "info")        return cmdInfo(sub);
     else if (cmd == "tag")         return cmdTag(sub);
+    else if (cmd == "tags")        return cmdTagsSync(sub);
     else if (cmd == "disc")        return cmdDisc(sub);
     else if (cmd == "replaygain")  return cmdReplaygain(sub);
     else if (cmd == "fingerprint") return cmdFingerprint(sub);
@@ -1470,6 +1473,58 @@ int CLIController::cmdDb(const QStringList& args) {
     }
     stdErr() << "Usage: db migrate|vacuum|info  (backup/restore: copy the .db file)\n";
     return 1;
+}
+
+int CLIController::cmdTagsSync(const QStringList& args) {
+    // Usage: tags sync [--all | --missing | <id>]
+    // Default (no flags) behaves like --missing.
+    const QString sub = args.value(0);
+    if (sub != QStringLiteral("sync")) {
+        stdErr() << QCoreApplication::translate("CLI",
+            "Usage: tags sync [--all | --missing | <id>]") << "\n";
+        return 1;
+    }
+    const QStringList syncArgs = args.mid(1);
+
+    auto* d = db();
+    if (!d) return 2;
+
+    MetadataResolver resolver;
+    QList<int> ids;
+
+    if (syncArgs.contains(QStringLiteral("--all"))) {
+        auto r = resolver.candidateIds(*d, false);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        ids = r.value();
+    } else if (syncArgs.isEmpty() || syncArgs.contains(QStringLiteral("--missing"))) {
+        auto r = resolver.candidateIds(*d, true);
+        if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+        ids = r.value();
+    } else {
+        // Explicit track ID
+        bool ok;
+        const int id = syncArgs[0].toInt(&ok);
+        if (!ok) {
+            stdErr() << QCoreApplication::translate("CLI",
+                "Invalid track id: %1").arg(syncArgs[0]) << "\n";
+            return 1;
+        }
+        ids << id;
+    }
+
+    const int scanned = ids.size();
+    auto r = resolver.syncMissing(*d, ids);
+    if (!r) { stdErr() << r.error().message << "\n"; return 2; }
+
+    if (m_format == QLatin1String("json")) {
+        QJsonObject o{{QStringLiteral("scanned"), scanned},
+                      {QStringLiteral("updated"), r.value()}};
+        stdOut() << QJsonDocument(o).toJson(QJsonDocument::Compact) << "\n";
+    } else {
+        stdOut() << QCoreApplication::translate("CLI", "Scanned: %1, updated: %2")
+                    .arg(scanned).arg(r.value()) << "\n";
+    }
+    return 0;
 }
 
 bool CLIController::tryDelegate(const QStringList& args) {

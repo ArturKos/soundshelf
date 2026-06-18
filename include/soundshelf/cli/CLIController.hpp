@@ -76,6 +76,17 @@ private:
     int cmdStats(const QStringList& args);
     int cmdExport(const QStringList& args);
     int cmdDb(const QStringList& args);
+    /**
+     * @brief Handles the `tags sync` subcommand (feature D7).
+     *
+     * Fills missing or placeholder tag fields (title, artist, album) for
+     * tracks in the library.  Resolution is attempted via AcoustID/MusicBrainz
+     * (when an API key is configured) and falls back to filename parsing.
+     *
+     * @param args  Arguments after the `tags` token (e.g. `sync --all`).
+     * @return 0 on success, 1 on usage error, 2 on runtime error.
+     */
+    int cmdTagsSync(const QStringList& args);
     int cmdHelp();
     int cmdVersion();
 
