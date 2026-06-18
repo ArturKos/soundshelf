@@ -316,7 +316,7 @@ Global hotkeys (system-wide, można wyłączyć):
 
 ---
 
-## Status implementacji (na 2026-06-18)
+## Status implementacji (na 2026-06-19)
 
 > Stan po fazach A/B/C + faza D (ReplayGain, AcoustID, EQ presety, spektrum FFT,
 > crossfade, dokończone komendy CLI) i ścieżce build Windows (vcpkg + MSVC static).
@@ -325,6 +325,7 @@ Global hotkeys (system-wide, można wyłączyć):
 > D5 complete: Library sources panel dla folder organization.
 > D6 complete: Batch operations (checkboxes, copy/delete/remove files) na sources & tracks.
 > D7 complete: MetadataResolver — fills missing/placeholder tags from filename or AcoustID; CLI `tags sync`.
+> D8 complete: VisualizationFeeder injectable DecodeFn seam + two-track regression test (trackChangeRestartsSpectrum). ✅ verified: Linux all 37 tests pass, Windows exit code 0.
 
 | Moduł | Status |
 |---|---|
@@ -352,6 +353,7 @@ Global hotkeys (system-wide, można wyłączyć):
 | `data::PodcastStore` + migration 007 (feature #12 DB) | **działa** — `podcast_feeds` + `podcast_episodes` tables, migration 007, `subscribe`/`updateFeedMetadata`/`upsertEpisodes`/`episodesForFeed`/`episode`/`setPlayed`/`setLocalPath`/`unsubscribe` (z testem) |
 | `core::PodcastManager` (feature #12 orchestration) | **działa** — `subscribe`/`refreshFeed`/`refreshAll`/`downloadEpisode`; injectable `FeedFetcher` dla testów (stub bez sieci); signals: `feedRefreshed`, `episodeDownloaded`, `errorOccurred`; logging `soundshelf.podcast.manager`; default fetcher blokuje na `RestClient::getBytes().result()` — wywoływać z wątku roboczego lub CLI (z testem). *Integracja z GUI (wątek/QtConcurrent) = future work* |
 | PlayerEngine (libmpv) | **działa** — play/seek/vol/auto-advance, EQ z poprawnym `af=lavfi=[...]` (D3 fixed), ReplayGain volume blend, presety EQ z JSON, spektrum FFT (FFTW3), crossfade (fade-out przez `Crossfader`). *Future work:* prawdziwy overlap (2. instancja mpv) i PCM tap z libmpv zasilający spektrum w czasie rzeczywistym |
+| VisualizationFeeder (D8) | **działa** — injectable `DecodeFn` seam (testability bez ffmpeg), live PCM decode z `QtConcurrent`, `onTrackChanged` invalidates epoch + restarts decode, spectrum restarts on track change (z testem `trackChangeRestartsSpectrum`) |
 | MainWindow + UI | **wpięte end-to-end** (import → biblioteka → playback); większość widgetów ma realny kod |
 | MPRIS adapter | **działa** (Linux/QtDBus) |
 | HTTP server (headless `--serve`) | **działa** — `main.cpp --serve --port`, Bearer token, REST przez `HttpServer`; `/api/v1/stream/<id>` obsługuje HTTP Range (RFC 7233): 206 Partial Content via pure `network::HttpRange` (None→200+Accept-Ranges, Satisfiable→206+Content-Range, Unsatisfiable→416, Malformed→200 fallback) (z testem) |

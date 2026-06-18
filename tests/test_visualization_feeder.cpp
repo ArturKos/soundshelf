@@ -1,12 +1,23 @@
 #include <QtTest>
 #include <QVector>
+#include <atomic>
 #include <cmath>
 
 #include "soundshelf/core/VisualizationFeeder.hpp"
 #include "soundshelf/core/PlayerEngine.hpp"
+#include "soundshelf/core/Result.hpp"
 #include "soundshelf/io/PcmDecoder.hpp"
 
 using namespace soundshelf;
+
+/// Thin subclass that lets tests emit PlayerEngine signals without libmpv.
+class TestPlayerEngine : public PlayerEngine {
+    Q_OBJECT
+public:
+    using PlayerEngine::PlayerEngine;
+    void emitTrackChanged(const Track& t) { emit trackChanged(t); }
+    void emitStateChanged(PlayerState s)  { emit stateChanged(s); }
+};
 
 namespace {
 
@@ -144,6 +155,103 @@ private slots:
         QCOMPARE(feeder.windowSamples(), 1024);
         feeder.setWindowSamples(2048);
         QCOMPARE(feeder.windowSamples(), 2048);
+    }
+
+    // (6) D8 regression: spectrum must restart (become non-zero) for BOTH the
+    //     first track AND a subsequent track change, not freeze on track A.
+    //
+    //     The injectable decoder seam removes the ffmpeg dependency so the test
+    //     runs without any audio files on disk.
+    //
+    //     The test proves the restart in two complementary ways:
+    //      (a) bFlacDecoded — an atomic flag set inside the decoder lambda when
+    //          "B.flac" is requested; QTRY on it verifies a fresh decode was
+    //          triggered by onTrackChanged (would fail if onTrackChanged was a no-op).
+    //      (b) spectrum non-zero after a verified-zero dip — emitting Stopped stops
+    //          the 33ms feed timer AND pushes silence synchronously, guaranteeing
+    //          the spectrum is zero before track B starts.  Any subsequent non-zero
+    //          reading therefore comes from B's decoded data, not stale A data.
+    void trackChangeRestartsSpectrum()
+    {
+        // Build two distinct synthetic buffers (different frequencies).
+        const auto bufA = makeSineBuf(440.0, 44100, 2, 44100);
+        const auto bufB = makeSineBuf(880.0, 44100, 2, 44100);
+
+        // Track whether the decoder was asked for "B.flac".
+        // Atomic because the decoder runs on a QtConcurrent worker thread.
+        std::atomic<bool> bFlacDecoded{false};
+
+        VisualizationFeeder::DecodeFn dec =
+            [&bFlacDecoded, bufA, bufB](const QString& path) -> Result<PcmDecoder::PcmBuffer>
+        {
+            if (path == QLatin1String("A.flac")) return bufA;
+            if (path == QLatin1String("B.flac")) {
+                bFlacDecoded.store(true, std::memory_order_release);
+                return bufB;
+            }
+            return Result<PcmDecoder::PcmBuffer>::err(
+                Error::InvalidArgument, QStringLiteral("unknown test path: %1").arg(path));
+        };
+
+        // PlayerEngine without initialize() — libmpv is skipped.
+        // pushVisualizationPcm / spectrumData still work (they don't need mpv).
+        TestPlayerEngine engine;
+        VisualizationFeeder feeder;
+        feeder.setDecoder(dec);
+        feeder.attachEngine(&engine);
+
+        // FFTW3 guard: same pattern as test case (2).  In practice FFTW3 is
+        // always present; the guard keeps the test formally correct if it is not.
+        const bool hasFftw = !PlayerEngine::computeSpectrum(
+            VisualizationFeeder::monoWindowAt(bufA, 0, 1024), 24).isEmpty();
+
+        auto specNonZero = [&engine]() {
+            const auto s = engine.spectrumData(24);
+            for (float v : s) if (v > 0.0f) return true;
+            return false;
+        };
+
+        // ── Track A ───────────────────────────────────────────────────────────
+        Track trackA;
+        trackA.filepath = QStringLiteral("A.flac");
+        engine.emitTrackChanged(trackA);
+        engine.emitStateChanged(PlayerState::Playing); // starts the 33ms feed timer
+
+        // Pump the event loop: QFutureWatcher delivers finished(), timer fires.
+        if (hasFftw) {
+            QTRY_VERIFY_WITH_TIMEOUT(specNonZero(), 5000);
+        } else {
+            QTest::qWait(300); // still exercises the decode/push cycle
+        }
+
+        // ── Verified-zero dip before track B ─────────────────────────────────
+        // emitStateChanged(Stopped) triggers onStateChanged which synchronously:
+        //   (a) calls m_timer->stop() — no more A-data pushes from the feeder, and
+        //   (b) calls pushSilence() — spectrum becomes all-zero immediately.
+        // Without this step the 33ms timer would keep pushing A's buffer during any
+        // qWait, making it impossible to establish a zero baseline before B starts.
+        engine.emitStateChanged(PlayerState::Stopped);
+        if (hasFftw) {
+            // Deterministic: no timer firing, silence pushed synchronously above.
+            QVERIFY(!specNonZero());
+        }
+
+        // ── Track B (the regression) ──────────────────────────────────────────
+        Track trackB;
+        trackB.filepath = QStringLiteral("B.flac");
+        engine.emitTrackChanged(trackB);           // clears buffer, starts B decode
+        engine.emitStateChanged(PlayerState::Playing); // restart the feed timer for B
+
+        // (a) Prove a fresh decode of B.flac was triggered — this assertion fails
+        //     if onTrackChanged is a no-op (the exact frozen-first-track bug).
+        QTRY_VERIFY_WITH_TIMEOUT(bFlacDecoded.load(std::memory_order_acquire), 5000);
+
+        // (b) Prove the spectrum comes alive from B's decoded data.
+        if (hasFftw) {
+            QTRY_VERIFY_WITH_TIMEOUT(specNonZero(), 5000);
+        } else {
+            QTest::qWait(300);
+        }
     }
 };
 

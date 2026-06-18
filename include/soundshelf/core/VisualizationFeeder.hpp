@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QTimer>
 #include <QVector>
+#include <functional>
 
 #include "soundshelf/core/PlayerEngine.hpp"
 #include "soundshelf/io/PcmDecoder.hpp"
@@ -20,10 +21,24 @@ namespace soundshelf {
  *
  * SpectrumWidget already polls spectrumData() on its own timer; no changes
  * to SpectrumWidget are required.
+ *
+ * On every trackChanged signal the feeder invalidates the in-flight decode
+ * (epoch bump in clearBuffer()) and immediately starts a fresh decode of the
+ * new file, so the spectrum restarts correctly when the track changes.
  */
 class VisualizationFeeder : public QObject {
     Q_OBJECT
 public:
+    /**
+     * @brief Synchronous decode function type.
+     *
+     * Given an audio file path, returns a decoded S16LE PCM buffer or an
+     * Error. The production default calls @c PcmDecoder::decodeToS16(path,
+     * 44100, 2); unit tests may substitute a fast synthetic decoder via
+     * @ref setDecoder() to avoid spawning a real @c ffmpeg process.
+     */
+    using DecodeFn = std::function<Result<PcmDecoder::PcmBuffer>(const QString& path)>;
+
     /**
      * @brief Constructs a feeder. Call attachEngine() to activate it.
      * @param parent Optional Qt parent.
@@ -40,6 +55,21 @@ public:
      * @param engine Non-null PlayerEngine to drive. Ownership is NOT transferred.
      */
     void attachEngine(PlayerEngine* engine);
+
+    /**
+     * @brief Overrides the PCM decoder used when decoding audio files.
+     *
+     * The default decoder calls @c PcmDecoder::decodeToS16(path, 44100, 2).
+     * Supply a custom @p fn to replace it — intended exclusively for unit
+     * tests that need deterministic, in-memory buffers without spawning
+     * @c ffmpeg. Passing a default-constructed (empty) @c std::function
+     * restores the production decoder.
+     *
+     * @param fn Callable matching @ref DecodeFn. Must be callable
+     *           (non-empty) on the calling side; an empty fn restores
+     *           the default.
+     */
+    void setDecoder(DecodeFn fn);
 
     /**
      * @brief Extracts a mono float window from an S16LE PCM buffer.
@@ -89,6 +119,7 @@ private:
     PcmDecoder::PcmBuffer m_pcmBuffer;
     int                   m_windowSamples = 1024;
     int                   m_decodeEpoch   = 0;
+    DecodeFn              m_decoder;
 };
 
 } // namespace soundshelf

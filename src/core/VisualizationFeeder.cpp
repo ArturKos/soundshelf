@@ -11,10 +11,19 @@ namespace soundshelf {
 
 VisualizationFeeder::VisualizationFeeder(QObject* parent)
     : QObject(parent)
+    , m_decoder([](const QString& path) { return PcmDecoder::decodeToS16(path, 44100, 2); })
 {
     m_timer = new QTimer(this);
     m_timer->setInterval(33); // ~30 fps
     connect(m_timer, &QTimer::timeout, this, &VisualizationFeeder::onTimerTick);
+}
+
+void VisualizationFeeder::setDecoder(DecodeFn fn)
+{
+    if (fn)
+        m_decoder = std::move(fn);
+    else
+        m_decoder = [](const QString& path) { return PcmDecoder::decodeToS16(path, 44100, 2); };
 }
 
 void VisualizationFeeder::attachEngine(PlayerEngine* engine)
@@ -109,8 +118,11 @@ void VisualizationFeeder::startDecoding(const QString& path)
     ++m_decodeEpoch;
     const int epoch = m_decodeEpoch;
 
-    auto future = QtConcurrent::run([path]() -> Result<PcmDecoder::PcmBuffer> {
-        return PcmDecoder::decodeToS16(path, 44100, 2);
+    // Copy the decoder so the lambda owns it independently of the feeder's
+    // lifetime (the worker thread outlives the QFutureWatcher cleanup).
+    auto dec = m_decoder;
+    auto future = QtConcurrent::run([path, dec = std::move(dec)]() -> Result<PcmDecoder::PcmBuffer> {
+        return dec(path);
     });
 
     auto* watcher = new QFutureWatcher<Result<PcmDecoder::PcmBuffer>>(this);
