@@ -229,6 +229,7 @@ set(SS_CORE_SOURCES
     src/core/VisualizationFeeder.cpp
     src/core/BatchTrackOps.cpp
     src/core/MetadataResolver.cpp
+    src/core/LyricsController.cpp
 )
 
 set(SS_IO_SOURCES

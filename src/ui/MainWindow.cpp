@@ -12,7 +12,7 @@
 #include "soundshelf/network/ListenBrainzClient.hpp"
 #include "soundshelf/network/MusicBrainzClient.hpp"
 #include "soundshelf/network/CoverArtClient.hpp"
-#include "soundshelf/network/LyricsClient.hpp"
+#include "soundshelf/core/LyricsController.hpp"
 #include "soundshelf/core/DiscEnricher.hpp"
 #include "soundshelf/core/DuplicateDetector.hpp"
 #include "soundshelf/core/Disc.hpp"
@@ -40,9 +40,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
-#include <QFutureWatcher>
 #include <QInputDialog>
-#include <QJsonDocument>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QHBoxLayout>
@@ -88,7 +86,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_musicbrainz  = new MusicBrainzClient(this);
     m_coverArt     = new CoverArtClient(this);
-    m_lyricsClient = new LyricsClient(this);
     m_enricher     = new DiscEnricher(m_musicbrainz, m_coverArt, this);
 
     auto initRes = m_engine->initialize();
@@ -101,6 +98,9 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_visFeeder = new VisualizationFeeder(this);
     m_visFeeder->attachEngine(m_engine);
+
+    m_lyricsController = new LyricsController(this);
+    m_lyricsController->attachEngine(m_engine);
 
     setupMenus();
     setupStatusBar();
@@ -467,41 +467,12 @@ void MainWindow::connectSignals() {
                     m_scrobbler, &Scrobbler::onTrackEnded);
         }
 
-        // Lyrics: on track change, pull from cache; on miss go to
-        // LRCLib and stash the response back into the lyrics table.
-        connect(m_engine, &PlayerEngine::trackChanged, this,
-                [this](const Track& t) {
-            if (!m_lyrics || t.id < 0) return;
-            auto& dbm = DatabaseManager::instance();
-            if (auto cached = dbm.getLyrics(t.id); cached) {
-                m_lyrics->setLyrics(cached.value().plain, cached.value().synced);
-                return;
-            }
-            // Cache miss — try LRCLib if we have what it needs.
-            if (!m_lyricsClient || t.title.isEmpty() || t.artist.isEmpty()) {
-                m_lyrics->setLyrics(QString(), QString());
-                return;
-            }
-            const int trackId = t.id;
-            const QString album = t.album;
-            auto fut = m_lyricsClient->getLyrics(t.artist, t.title, album,
-                                                  qMax(0, t.durationMs / 1000));
-            auto* w = new QFutureWatcher<Result<QJsonDocument>>(this);
-            connect(w, &QFutureWatcher<Result<QJsonDocument>>::finished, this,
-                    [this, w, trackId]() {
-                const auto r = w->result();
-                w->deleteLater();
-                if (!r) return;
-                const auto decoded = LyricsClient::decode(r.value());
-                m_lyrics->setLyrics(decoded.plain, decoded.synced);
-                DatabaseManager::LyricsRow row;
-                row.plain  = decoded.plain;
-                row.synced = decoded.synced;
-                row.source = decoded.source;
-                DatabaseManager::instance().setLyrics(trackId, row);
-            });
-            w->setFuture(fut);
-        });
+        // Lyrics: LyricsController handles cache lookup, LRCLib fetch,
+        // stale-reply guard, and cache write-back.
+        connect(m_lyricsController, &LyricsController::lyricsReady,
+                m_lyrics, &LyricsWidget::setLyrics);
+        connect(m_lyricsController, &LyricsController::lyricsCleared,
+                this, [this] { m_lyrics->setLyrics(QString(), QString()); });
 
         // Auto-advance: when libmpv reports end-of-file, the track ended
         // naturally — pick the next entry from the runtime queue and play.
