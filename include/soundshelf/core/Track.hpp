@@ -82,6 +82,9 @@ struct Track {
     QDateTime mtime;
     QDateTime lastPlayed;
 
+    // Library source (folder that was imported to bring this track in)
+    int sourceId = -1;
+
     // Optional embedded cue offset (for "one big FLAC + cue")
     std::optional<int> cueOffsetMs;
     std::optional<int> cueDurationMs;

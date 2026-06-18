@@ -33,17 +33,20 @@
 #include "soundshelf/ui/ConverterDialog.hpp"
 #include "soundshelf/ui/DiscReadDialog.hpp"
 #include "soundshelf/ui/TrayIcon.hpp"
+#include "soundshelf/ui/SourcesModel.hpp"
 #include "soundshelf/core/VisualizationFeeder.hpp"
 
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QFutureWatcher>
+#include <QInputDialog>
 #include <QJsonDocument>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QListView>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -117,6 +120,57 @@ void MainWindow::setupUi() {
     // Central — table of tracks
     m_libraryView = new LibraryView(this);
     setCentralWidget(m_libraryView);
+
+    // Left dock — library sources panel
+    auto* sourcesDock = new QDockWidget(tr("Sources"), this);
+    sourcesDock->setObjectName(QStringLiteral("SourcesDock"));
+    m_sourcesModel = new SourcesModel(this);
+    auto* sourcesView = new QListView(sourcesDock);
+    sourcesView->setModel(m_sourcesModel);
+    sourcesView->setEditTriggers(QAbstractItemView::DoubleClicked);
+    sourcesView->setContextMenuPolicy(Qt::CustomContextMenu);
+    sourcesDock->setWidget(sourcesView);
+    sourcesDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::LeftDockWidgetArea, sourcesDock);
+
+    // Wire selection → source filter
+    connect(sourcesView->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, [this](const QModelIndex& current, const QModelIndex&) {
+        if (!current.isValid()) return;
+        onSourceSelected(m_sourcesModel->sourceIdAt(current.row()));
+    });
+
+    // Context menu: Rename / Remove
+    connect(sourcesView, &QListView::customContextMenuRequested,
+            this, [this, sourcesView](const QPoint& pos) {
+        const QModelIndex idx = sourcesView->indexAt(pos);
+        if (!idx.isValid() || idx.row() == 0) return;  // skip "All music"
+        QMenu menu(this);
+        menu.addAction(tr("Rename…"), this, [this, sourcesView, idx]() {
+            const QString current = m_sourcesModel->data(idx, Qt::DisplayRole).toString();
+            bool ok = false;
+            const QString newLabel = QInputDialog::getText(
+                this, tr("Rename source"), tr("New name:"),
+                QLineEdit::Normal, current, &ok);
+            if (ok && !newLabel.trimmed().isEmpty())
+                m_sourcesModel->setData(idx, newLabel.trimmed(), Qt::EditRole);
+        });
+        menu.addSeparator();
+        menu.addAction(tr("Remove source"), this, [this, sourcesView, idx]() {
+            if (QMessageBox::question(this, tr("Remove source"),
+                    tr("Remove this source from the library? Tracks will remain in the database."),
+                    QMessageBox::Yes | QMessageBox::No) != QMessageBox::Yes)
+                return;
+            const int row = idx.row();
+            const int removedId = m_sourcesModel->sourceIdAt(row);  // capture before removal
+            if (m_sourcesModel->removeAt(row)) {
+                // If the active source was removed, fall back to "All music"
+                if (m_activeSourceId == removedId)
+                    onSourceSelected(-1);
+            }
+        });
+        menu.exec(sourcesView->viewport()->mapToGlobal(pos));
+    });
 
     // Left dock — disc grid
     auto* discDock = new QDockWidget(tr("Discs"), this);
@@ -410,13 +464,36 @@ void MainWindow::changeEvent(QEvent* event) {
 }
 
 void MainWindow::reloadLibrary() {
-    auto r = DatabaseManager::instance().listTracks(5000, 0);
-    if (!r) {
-        statusBar()->showMessage(tr("Cannot list tracks: %1").arg(r.error().message), 5000);
-        return;
+    auto& dbm = DatabaseManager::instance();
+    QList<Track> tracks;
+    if (m_activeSourceId >= 0) {
+        auto r = dbm.tracksBySource(m_activeSourceId);
+        if (!r) {
+            statusBar()->showMessage(
+                tr("Cannot list tracks: %1").arg(r.error().message), 5000);
+            return;
+        }
+        tracks = r.value();
+    } else {
+        auto r = dbm.listTracks(5000, 0);
+        if (!r) {
+            statusBar()->showMessage(
+                tr("Cannot list tracks: %1").arg(r.error().message), 5000);
+            return;
+        }
+        tracks = r.value();
     }
-    m_libraryView->setTracks(r.value());
-    m_statusLibCount->setText(tr("%1 tracks").arg(r.value().size()));
+    m_libraryView->setTracks(tracks);
+    m_statusLibCount->setText(tr("%1 tracks").arg(tracks.size()));
+}
+
+void MainWindow::reloadSources() {
+    if (m_sourcesModel) m_sourcesModel->reload();
+}
+
+void MainWindow::onSourceSelected(int sourceId) {
+    m_activeSourceId = sourceId;
+    reloadLibrary();
 }
 
 void MainWindow::reloadDiscs() {
@@ -478,6 +555,7 @@ void MainWindow::onImportFinished(int filesProcessed, int errors) {
     statusBar()->showMessage(
         tr("Import finished: %1 files, %2 errors").arg(filesProcessed).arg(errors),
         5000);
+    reloadSources();
     reloadLibrary();
 }
 

@@ -73,6 +73,19 @@ Result<void> LibraryManager::importFolder(const QString& folderPath) {
     }
     m_busy = true;
 
+    // Ensure source row exists on the calling (main) thread BEFORE spawning
+    // the worker. The per-thread DB connection in QtConcurrent would work too,
+    // but doing it here keeps source insertion sequenced with the import call.
+    int sourceId = -1;
+    {
+        const QString label = QFileInfo(folderPath).fileName();
+        if (auto sr = DatabaseManager::instance().ensureSource(folderPath, label); sr) {
+            sourceId = sr.value();
+        } else {
+            qCWarning(lcLib) << "ensureSource failed:" << sr.error().message;
+        }
+    }
+
     auto* watcher = new QFutureWatcher<QPair<int,int>>(this);
     connect(watcher, &QFutureWatcher<QPair<int,int>>::finished,
             this, [this, watcher]() {
@@ -83,7 +96,7 @@ Result<void> LibraryManager::importFolder(const QString& folderPath) {
     });
 
     const QString rootCopy = folderPath;
-    auto fut = QtConcurrent::run([this, rootCopy]() -> QPair<int,int> {
+    auto fut = QtConcurrent::run([this, rootCopy, sourceId]() -> QPair<int,int> {
         const QStringList files = collectAudioFiles(rootCopy);
         int processed = 0, errors = 0;
         const int total = files.size();
@@ -92,6 +105,7 @@ Result<void> LibraryManager::importFolder(const QString& folderPath) {
             auto tr = trackFromFile(f);
             if (!tr) { ++errors; continue; }
             Track tracker = tr.value();
+            tracker.sourceId = sourceId;
             // Resolve foreign keys (artist / genre / disc).
             auto& dbm = DatabaseManager::instance();
             if (!tracker.artist.isEmpty()) {

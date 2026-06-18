@@ -32,6 +32,35 @@ public:
     /// Default path: $XDG_DATA_HOME/soundshelf/library.db
     static QString defaultDbPath();
 
+    // ------- Library sources -------
+
+    /// Metadata for a single imported folder source.
+    struct SourceInfo {
+        int       id;
+        QString   path;
+        QString   label;
+        QDateTime addedAt;
+    };
+
+    /// Find-or-insert a library source by @p path. Returns the source id.
+    /// @p label is only applied on the initial insert; subsequent calls for
+    /// the same path are idempotent — the existing id is returned unchanged.
+    Result<int> ensureSource(const QString& path, const QString& label);
+
+    /// All library source rows ordered by @c added_at DESC.
+    Result<QList<SourceInfo>> listSources();
+
+    /// Rename a source row.
+    Result<void> renameSource(int id, const QString& label);
+
+    /// Delete a source row. Tracks that belonged to it have their
+    /// @c source_id set to NULL beforehand (explicit, not FK cascade).
+    Result<void> removeSource(int id);
+
+    /// All non-missing tracks for the given source, ordered by
+    /// @c added_at DESC. Limit defaults to 10 000.
+    Result<QList<Track>> tracksBySource(int sourceId, int limit = 10000);
+
     // ------- Track operations -------
 
     /// INSERT lub UPDATE w zależności od istnienia filepath.

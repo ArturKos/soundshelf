@@ -134,6 +134,95 @@ Result<int> DatabaseManager::ensureGenre(const QString& name) {
     return Result<int>::ok(q.lastInsertId().toInt());
 }
 
+Result<int> DatabaseManager::ensureSource(const QString& path, const QString& label) {
+    QSqlQuery q(conn());
+    q.prepare(QStringLiteral("SELECT id FROM library_sources WHERE path = ?"));
+    q.addBindValue(path);
+    if (q.exec() && q.next()) {
+        qCDebug(lcDb) << "ensureSource: existing id=" << q.value(0).toInt() << "path=" << path;
+        return Result<int>::ok(q.value(0).toInt());
+    }
+    q.prepare(QStringLiteral(
+        "INSERT INTO library_sources(path, label) VALUES (?, ?)"));
+    q.addBindValue(path);
+    q.addBindValue(label);
+    if (!q.exec()) {
+        return Result<int>::err(Error::DatabaseError,
+            QStringLiteral("ensureSource insert: %1").arg(q.lastError().text()));
+    }
+    const int id = q.lastInsertId().toInt();
+    qCDebug(lcDb) << "ensureSource: new id=" << id << "path=" << path;
+    return Result<int>::ok(id);
+}
+
+Result<QList<DatabaseManager::SourceInfo>> DatabaseManager::listSources() {
+    QSqlQuery q(conn());
+    if (!q.exec(QStringLiteral(
+            "SELECT id, path, label, added_at FROM library_sources "
+            "ORDER BY added_at DESC"))) {
+        return Result<QList<SourceInfo>>::err(Error::DatabaseError, q.lastError().text());
+    }
+    QList<SourceInfo> out;
+    while (q.next()) {
+        SourceInfo s;
+        s.id      = q.value(0).toInt();
+        s.path    = q.value(1).toString();
+        s.label   = q.value(2).toString();
+        s.addedAt = q.value(3).toDateTime();
+        out << s;
+    }
+    return Result<QList<SourceInfo>>::ok(std::move(out));
+}
+
+Result<void> DatabaseManager::renameSource(int id, const QString& label) {
+    QSqlQuery q(conn());
+    q.prepare(QStringLiteral("UPDATE library_sources SET label = ? WHERE id = ?"));
+    q.addBindValue(label);
+    q.addBindValue(id);
+    if (!q.exec()) {
+        return Result<void>::err(Error::DatabaseError,
+            QStringLiteral("renameSource: %1").arg(q.lastError().text()));
+    }
+    qCDebug(lcDb) << "renameSource: id=" << id << "label=" << label;
+    return Result<void>::ok();
+}
+
+Result<void> DatabaseManager::removeSource(int id) {
+    QSqlQuery q(conn());
+    // Explicit NULL-out so tracks stay in place (not deleted by FK cascade).
+    q.prepare(QStringLiteral("UPDATE tracks SET source_id = NULL WHERE source_id = ?"));
+    q.addBindValue(id);
+    if (!q.exec()) {
+        return Result<void>::err(Error::DatabaseError,
+            QStringLiteral("removeSource null tracks: %1").arg(q.lastError().text()));
+    }
+    q.prepare(QStringLiteral("DELETE FROM library_sources WHERE id = ?"));
+    q.addBindValue(id);
+    if (!q.exec()) {
+        return Result<void>::err(Error::DatabaseError,
+            QStringLiteral("removeSource delete: %1").arg(q.lastError().text()));
+    }
+    qCDebug(lcDb) << "removeSource: id=" << id;
+    return Result<void>::ok();
+}
+
+Result<QList<Track>> DatabaseManager::tracksBySource(int sourceId, int limit) {
+    QSqlQuery q(conn());
+    q.prepare(QStringLiteral(
+        "SELECT id FROM tracks WHERE source_id = ? AND missing = 0 "
+        "ORDER BY added_at DESC LIMIT ?"));
+    q.addBindValue(sourceId);
+    q.addBindValue(limit);
+    if (!q.exec()) {
+        return Result<QList<Track>>::err(Error::DatabaseError, q.lastError().text());
+    }
+    QList<Track> out;
+    while (q.next()) {
+        if (auto r = getTrack(q.value(0).toInt()); r) out << r.value();
+    }
+    return Result<QList<Track>>::ok(std::move(out));
+}
+
 Result<int> DatabaseManager::upsertTrack(Track& track) {
     // Resolve FK if not yet set
     if (track.artistId < 0 && !track.artist.isEmpty()) {
@@ -162,8 +251,8 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
         "INSERT INTO tracks(filepath, filename, disc_id, artist_id, album_artist_id, "
         "genre_id, title, track_number, disc_number, year, duration_ms, bitrate, "
         "samplerate, channels, format, md5_hash, rg_track_gain, rg_track_peak, "
-        "rg_album_gain, rg_album_peak, acoustid, mb_recording_id, mtime) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+        "rg_album_gain, rg_album_peak, acoustid, mb_recording_id, mtime, source_id) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
         "ON CONFLICT(filepath) DO UPDATE SET "
         "title=excluded.title, artist_id=excluded.artist_id, "
         "album_artist_id=excluded.album_artist_id, genre_id=excluded.genre_id, "
@@ -174,7 +263,7 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
         "rg_track_gain=excluded.rg_track_gain, rg_track_peak=excluded.rg_track_peak, "
         "rg_album_gain=excluded.rg_album_gain, rg_album_peak=excluded.rg_album_peak, "
         "acoustid=excluded.acoustid, mb_recording_id=excluded.mb_recording_id, "
-        "mtime=excluded.mtime, missing=0"));
+        "mtime=excluded.mtime, source_id=excluded.source_id, missing=0"));
 
     auto bindOpt = [&q](const std::optional<double>& o) {
         if (o.has_value()) q.addBindValue(*o);
@@ -204,6 +293,7 @@ Result<int> DatabaseManager::upsertTrack(Track& track) {
     q.addBindValue(track.acoustid);
     q.addBindValue(track.mbRecordingId);
     q.addBindValue(track.mtime);
+    q.addBindValue(track.sourceId >= 0 ? QVariant(track.sourceId) : QVariant());
 
     if (!q.exec()) {
         return Result<int>::err(Error::DatabaseError,

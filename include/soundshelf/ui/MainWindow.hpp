@@ -16,6 +16,7 @@ class SpectrumWidget;
 class EqualizerWidget;
 class LyricsWidget;
 class TrayIcon;
+class SourcesModel;
 class PlayerEngine;
 class LibraryManager;
 class DiscManager;
@@ -76,6 +77,7 @@ private slots:
     void onDiscActivated(int discId);
     void onImportProgress(int pct, const QString& currentPath);
     void onImportFinished(int filesProcessed, int errors);
+    void onSourceSelected(int sourceId);
 
 private:
     void setupUi();
@@ -88,6 +90,7 @@ private:
     void saveState();
     void reloadLibrary();
     void reloadDiscs();
+    void reloadSources();
 
     LibraryView*     m_libraryView = nullptr;
     DiscView*        m_discView = nullptr;
@@ -99,6 +102,8 @@ private:
     TrayIcon*        m_tray = nullptr;
     QLabel*          m_statusLibCount = nullptr;
     QLabel*          m_statusDbInfo = nullptr;
+    SourcesModel*    m_sourcesModel = nullptr;
+    int              m_activeSourceId = -1;
 
     PlayerEngine*       m_engine = nullptr;
     LibraryManager*     m_library = nullptr;

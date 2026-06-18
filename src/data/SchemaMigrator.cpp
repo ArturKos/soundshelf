@@ -22,6 +22,7 @@ QStringList SchemaMigrator::availableMigrations() {
         QStringLiteral(":/migrations/006_bookmarks.sql"),
         QStringLiteral(":/migrations/007_podcasts.sql"),
         QStringLiteral(":/migrations/008_fts_contentless_sync.sql"),
+        QStringLiteral(":/migrations/009_library_sources.sql"),
     };
 }
 

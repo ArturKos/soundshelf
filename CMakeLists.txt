@@ -295,6 +295,7 @@ set(SS_UI_SOURCES
     src/ui/ConverterDialog.cpp
     src/ui/DiscReadDialog.cpp
     src/ui/TrayIcon.cpp
+    src/ui/SourcesModel.cpp
 )
 
 set(SS_CLI_SOURCES
@@ -388,6 +389,7 @@ qt_add_resources(soundshelf_lib "soundshelf_resources"
         migrations/006_bookmarks.sql
         migrations/007_podcasts.sql
         migrations/008_fts_contentless_sync.sql
+        migrations/009_library_sources.sql
         resources/themes/modern_dark.qss
         resources/themes/amber_crt.qss
         resources/themes/phosphor.qss
