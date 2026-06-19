@@ -199,7 +199,7 @@ void MainWindow::setupUi() {
     auto* visMode = new QComboBox(visTab);
     visMode->addItem(tr("Spectrum bars"));
     visMode->addItem(tr("Oscilloscope"));
-    visMode->addItem(tr("Waveform overview"));
+    // (Waveform overview lives in the transport bar as the seek control.)
     m_spectrum = new SpectrumWidget(visTab);
     visLay->addWidget(visMode);
     visLay->addWidget(m_spectrum, 1);
@@ -209,17 +209,11 @@ void MainWindow::setupUi() {
     m_rightTabs->addTab(m_lyrics,   tr("Lyrics"));
 
     // Visualisation plugins (parented to this so they outlive the lambda).
-    auto* oscPlugin  = new OscilloscopePlugin(this);
-    auto* wavePlugin = new WaveformOverviewPlugin(this);
+    auto* oscPlugin = new OscilloscopePlugin(this);
     connect(visMode, &QComboBox::currentIndexChanged, this,
-            [this, oscPlugin, wavePlugin](int idx) {
-        switch (idx) {
-            case 1:  m_spectrum->setActivePlugin(oscPlugin);  break;
-            case 2:  m_spectrum->setActivePlugin(wavePlugin); break;
-            default: m_spectrum->setActivePlugin(nullptr);    break;  // built-in bars
-        }
+            [this, oscPlugin](int idx) {
+        m_spectrum->setActivePlugin(idx == 1 ? oscPlugin : nullptr);  // 0 = built-in bars
     });
-    wavePlugin->setEngine(m_engine);  // connects trackChanged → recompute envelope + enables seek
     rightDock->setWidget(m_rightTabs);
     rightDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, rightDock);

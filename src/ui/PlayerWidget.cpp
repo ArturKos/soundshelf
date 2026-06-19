@@ -7,6 +7,8 @@
 #include <QSlider>
 #include <QFileInfo>
 #include <QSignalBlocker>
+#include "soundshelf/ui/SpectrumWidget.hpp"
+#include "soundshelf/plugins/WaveformOverviewPlugin.hpp"
 
 namespace soundshelf {
 
@@ -33,8 +35,11 @@ PlayerWidget::PlayerWidget(QWidget* parent) : QWidget(parent) {
     m_nextBtn = new QPushButton(tr("⏭"), this);
     for (auto* b : { m_prevBtn, m_playBtn, m_nextBtn }) b->setFixedWidth(36);
 
-    m_seek = new QSlider(Qt::Horizontal, this);
-    m_seek->setRange(0, 0);
+    // Interactive waveform seek bar (replaces the plain slider): shows the
+    // track's amplitude envelope, a playback cursor, and seeks on click/drag.
+    m_waveSeek = new SpectrumWidget(this);
+    m_waveSeek->setMinimumHeight(40);
+    m_waveSeek->setMaximumHeight(56);
 
     m_timeLabel = new QLabel(QStringLiteral("0:00 / 0:00"), this);
 
@@ -50,7 +55,7 @@ PlayerWidget::PlayerWidget(QWidget* parent) : QWidget(parent) {
     root->addWidget(m_prevBtn);
     root->addWidget(m_playBtn);
     root->addWidget(m_nextBtn);
-    root->addWidget(m_seek, 2);
+    root->addWidget(m_waveSeek, 2);
     root->addWidget(m_timeLabel);
     root->addWidget(new QLabel(QStringLiteral("🔊"), this));
     root->addWidget(m_volume);
@@ -62,9 +67,7 @@ PlayerWidget::PlayerWidget(QWidget* parent) : QWidget(parent) {
         if (m_engine->state() == PlayerState::Playing) m_engine->pause();
         else                                            m_engine->resume();
     });
-    connect(m_seek, &QSlider::sliderReleased, this, [this]() {
-        if (m_engine && m_durationMs > 0) m_engine->seekMs(m_seek->value());
-    });
+    // Seeking is handled by the waveform widget itself (click/drag → seekMs).
     connect(m_volume, &QSlider::valueChanged, this, [this](int v) {
         if (m_engine) m_engine->setVolume(v);
     });
@@ -81,6 +84,12 @@ QString PlayerWidget::fmtTime(int ms) {
 void PlayerWidget::attachEngine(PlayerEngine* engine) {
     m_engine = engine;
     if (!engine) return;
+    // Drive the waveform seek bar from the engine: it renders the cursor at the
+    // current position and seeks on click/drag via WaveformOverviewPlugin.
+    m_waveSeek->attachEngine(engine);
+    auto* wave = new WaveformOverviewPlugin(this);
+    wave->setEngine(engine);
+    m_waveSeek->setActivePlugin(wave);
     connect(engine, &PlayerEngine::stateChanged,    this, &PlayerWidget::onState);
     connect(engine, &PlayerEngine::positionChanged, this, &PlayerWidget::onPosition);
     connect(engine, &PlayerEngine::durationChanged, this, &PlayerWidget::onDuration);
@@ -94,17 +103,14 @@ void PlayerWidget::onState(PlayerState state) {
 }
 
 void PlayerWidget::onPosition(int posMs) {
-    if (!m_seek->isSliderDown()) {
-        QSignalBlocker b(m_seek);
-        m_seek->setValue(posMs);
-    }
+    // The waveform cursor tracks the engine position itself; we only keep the
+    // numeric time label in sync here.
     m_timeLabel->setText(QStringLiteral("%1 / %2")
         .arg(fmtTime(posMs), fmtTime(m_durationMs)));
 }
 
 void PlayerWidget::onDuration(int durMs) {
     m_durationMs = durMs;
-    m_seek->setRange(0, durMs);
     m_timeLabel->setText(QStringLiteral("%1 / %2")
         .arg(fmtTime(0), fmtTime(durMs)));
 }

@@ -10,6 +10,8 @@ class QSlider;
 
 namespace soundshelf {
 
+class SpectrumWidget;
+
 /**
  * @brief Bottom transport bar — play / pause / next / prev / seek / volume.
  *
@@ -53,7 +55,7 @@ private:
     QPushButton*  m_prevBtn = nullptr;
     QPushButton*  m_playBtn = nullptr;
     QPushButton*  m_nextBtn = nullptr;
-    QSlider*      m_seek = nullptr;
+    SpectrumWidget* m_waveSeek = nullptr;  ///< waveform-overview seek bar (replaces the plain slider)
     QSlider*      m_volume = nullptr;
     int           m_durationMs = 0;
 };
