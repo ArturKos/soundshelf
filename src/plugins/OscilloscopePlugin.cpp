@@ -1,6 +1,8 @@
 #include "soundshelf/plugins/OscilloscopePlugin.hpp"
+#include "soundshelf/plugins/VisualStyle.hpp"
 
 #include <QPainter>
+#include <QLinearGradient>
 #include <QLoggingCategory>
 #include <algorithm>
 
@@ -40,22 +42,38 @@ void OscilloscopePlugin::render(QPainter& painter,
     if (area.width() <= 0 || area.height() <= 0)
         return;
 
-    QPen pen(QColor(57, 255, 20)); // phosphor green
-    pen.setWidthF(1.5);
-    painter.setPen(pen);
     painter.setRenderHint(QPainter::Antialiasing);
+
+    // Horizontal colour gradient across the trace from the active style.
+    const VisualStyle st = currentVisualStyle();
+    QLinearGradient grad(area.left(), 0, area.right(), 0);
+    for (int i = 0; i <= 6; ++i)
+        grad.setColorAt(i / 6.0, visColor(st, i / 6.0, 1.0));
+    QPen pen(QBrush(grad), 1.6);
 
     if (pcm.size() < 2) {
         // Flat centre line when idle or no PCM available
         const qreal cy = area.center().y();
+        painter.setPen(pen);
         painter.drawLine(QPointF(area.left(), cy), QPointF(area.right(), cy));
         qCDebug(lcScope) << "Idle oscilloscope (no PCM frame)";
         return;
     }
 
     const QPolygonF poly = buildPolyline(pcm, area);
-    if (!poly.isEmpty())
+    if (poly.isEmpty()) return;
+
+    // Neon: a soft, thick translucent underlay gives a glow halo.
+    if (visWantsGlow(st)) {
+        QColor glow = visEffectiveAccent(st);
+        glow.setAlpha(70);
+        QPen glowPen(glow, 5.0);
+        glowPen.setCapStyle(Qt::RoundCap);
+        painter.setPen(glowPen);
         painter.drawPolyline(poly);
+    }
+    painter.setPen(pen);
+    painter.drawPolyline(poly);
 }
 
 } // namespace soundshelf

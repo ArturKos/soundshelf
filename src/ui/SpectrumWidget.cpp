@@ -2,9 +2,14 @@
 #include "soundshelf/core/PlayerEngine.hpp"
 #include "soundshelf/plugins/VisualizationPlugin.hpp"
 #include "soundshelf/plugins/WaveformOverviewPlugin.hpp"
+#include "soundshelf/plugins/VisualStyle.hpp"
 
 #include <QPainter>
+#include <QLinearGradient>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
+#include <QMenu>
+#include <QColorDialog>
 
 namespace soundshelf {
 
@@ -81,21 +86,61 @@ void SpectrumWidget::drawBuiltinBars(QPainter& p) {
 
     const qreal w = qreal(width()) / n;
     const qreal h = height();
-
-    // Retro phosphor-green gradient, brighter towards the top.
-    QLinearGradient grad(0, h, 0, 0);
-    grad.setColorAt(0.0, QColor(0, 120, 0));
-    grad.setColorAt(0.6, QColor(0, 220, 60));
-    grad.setColorAt(1.0, QColor(180, 255, 120));
-
+    const VisualStyle st = currentVisualStyle();
     p.setPen(Qt::NoPen);
-    p.setBrush(grad);
+
     for (int i = 0; i < n; ++i) {
         const qreal level = qBound(0.0f, m_lastSpectrum[i], 1.0f);
         const qreal barH = level * (h - 2);
         const QRectF bar(i * w + 1, h - barH, w - 2, barH);
+        // Per-bar colour from the active style (rainbow = hue across the
+        // spectrum), with a vertical brightness gradient: dim base → bright tip.
+        const QColor top = visColor(st, qreal(i) / n, 1.0);
+        const QColor base = top.darker(220);
+        QLinearGradient grad(0, h, 0, h - barH);
+        grad.setColorAt(0.0, base);
+        grad.setColorAt(1.0, top);
+        p.setBrush(grad);
         p.drawRect(bar);
+        if (visWantsGlow(st)) {                 // Neon: soft glow tip
+            QColor glow = top; glow.setAlpha(60);
+            p.setBrush(glow);
+            p.drawRect(QRectF(i * w, h - barH - 3, w, 4));
+        }
     }
+}
+
+void SpectrumWidget::contextMenuEvent(QContextMenuEvent* ev) {
+    QMenu menu(this);
+    auto add = [&](const QString& label, VisScheme scheme) {
+        QAction* a = menu.addAction(label);
+        a->setCheckable(true);
+        a->setChecked(currentVisualStyle().scheme == scheme);
+        connect(a, &QAction::triggered, this, [scheme]() {
+            VisualStyle s = currentVisualStyle();
+            s.scheme = scheme;
+            setCurrentVisualStyle(s);
+        });
+    };
+    add(tr("Rainbow"),        VisScheme::Rainbow);
+    add(tr("Phosphor green"), VisScheme::Phosphor);
+    add(tr("Amber"),          VisScheme::Amber);
+    add(tr("Ice blue"),       VisScheme::Ice);
+    add(tr("Neon (accent)"),  VisScheme::Neon);
+    menu.addSeparator();
+    QAction* pick = menu.addAction(tr("Choose accent colour…"));
+    connect(pick, &QAction::triggered, this, [this]() {
+        const QColor c = QColorDialog::getColor(currentVisualStyle().accent, this,
+                                                tr("Visualisation accent colour"));
+        if (c.isValid()) {
+            VisualStyle s = currentVisualStyle();
+            s.accent = c;
+            s.scheme = VisScheme::Neon;   // accent schemes show the picked colour
+            setCurrentVisualStyle(s);
+        }
+    });
+    menu.exec(ev->globalPos());
+    update();
 }
 
 } // namespace soundshelf

@@ -5,6 +5,7 @@
 #include <QTimer>
 
 class QPainter;
+class QContextMenuEvent;
 
 namespace soundshelf {
 
@@ -42,6 +43,8 @@ protected:
     void mousePressEvent(QMouseEvent* ev) override;
     /// Forwards drag-to-seek when the active plugin is a WaveformOverviewPlugin.
     void mouseMoveEvent(QMouseEvent* ev) override;
+    /// Right-click menu: pick the visualisation colour scheme / accent.
+    void contextMenuEvent(QContextMenuEvent* ev) override;
 
 private:
     void drawBuiltinBars(QPainter& p);

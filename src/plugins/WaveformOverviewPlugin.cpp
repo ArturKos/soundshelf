@@ -1,4 +1,5 @@
 #include "soundshelf/plugins/WaveformOverviewPlugin.hpp"
+#include "soundshelf/plugins/VisualStyle.hpp"
 #include "soundshelf/core/PlayerEngine.hpp"
 
 #include <QPainter>
@@ -54,11 +55,19 @@ void WaveformOverviewPlugin::render(QPainter& painter,
     const qreal halfH = area.height() / 2.0;
 
     if (!m_envelope.isEmpty()) {
-        painter.setPen(QColor(57, 255, 20)); // phosphor green
+        const VisualStyle st = currentVisualStyle();
         const int n = m_envelope.size();
+        // Fraction of the track already played → that part renders at full
+        // brightness, the rest is dimmed so the waveform doubles as a progress bar.
+        const qreal playedFrac = (m_engine && m_durationMs > 0)
+            ? qBound(0.0, double(m_engine->positionMs()) / m_durationMs, 1.0) : 0.0;
         for (int i = 0; i < n; ++i) {
-            // Remap envelope bin index to pixel column
+            const qreal t = (i + 0.5) / n;
             const qreal x = area.left() + (i + 0.5) * area.width() / n;
+            const qreal lvl = qMax(std::abs(m_envelope[i].max), std::abs(m_envelope[i].min));
+            QColor c = visColor(st, t, qBound(0.3, double(0.35 + 0.65 * lvl), 1.0));
+            if (t > playedFrac) c = c.darker(190);   // unplayed → dimmed
+            painter.setPen(c);
             const qreal yMax = cy - static_cast<qreal>(m_envelope[i].max) * halfH;
             const qreal yMin = cy - static_cast<qreal>(m_envelope[i].min) * halfH;
             painter.drawLine(QPointF(x, yMax), QPointF(x, yMin));
