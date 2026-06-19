@@ -1,8 +1,10 @@
 #include "soundshelf/ui/SpectrumWidget.hpp"
 #include "soundshelf/core/PlayerEngine.hpp"
 #include "soundshelf/plugins/VisualizationPlugin.hpp"
+#include "soundshelf/plugins/WaveformOverviewPlugin.hpp"
 
 #include <QPainter>
+#include <QMouseEvent>
 
 namespace soundshelf {
 
@@ -49,12 +51,28 @@ void SpectrumWidget::paintEvent(QPaintEvent* /*ev*/) {
 
     // An active Winamp/native plugin takes over the whole surface.
     if (m_plugin) {
-        QVector<float> pcm;  // PCM tap not wired yet; plugins can opt out
+        // Pass the live PCM frame so WantPcm plugins (e.g. OscilloscopePlugin) work.
+        const QVector<float> pcm = m_engine->visualizationPcm();
         m_plugin->render(p, QRectF(rect()), pcm, m_lastSpectrum);
         return;
     }
 
     drawBuiltinBars(p);
+}
+
+void SpectrumWidget::handleWaveformSeek(double x) {
+    auto* wf = qobject_cast<WaveformOverviewPlugin*>(m_plugin);
+    if (wf)
+        wf->handleClick(x, QRectF(rect()));
+}
+
+void SpectrumWidget::mousePressEvent(QMouseEvent* ev) {
+    handleWaveformSeek(ev->position().x());
+}
+
+void SpectrumWidget::mouseMoveEvent(QMouseEvent* ev) {
+    if (ev->buttons() & Qt::LeftButton)
+        handleWaveformSeek(ev->position().x());
 }
 
 void SpectrumWidget::drawBuiltinBars(QPainter& p) {

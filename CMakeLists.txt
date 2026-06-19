@@ -279,6 +279,8 @@ set(SS_PLUGIN_SOURCES
     src/plugins/VisualizationPlugin.cpp
     src/plugins/WinampVisAdapter.cpp
     src/plugins/NativeVisPlugin.cpp
+    src/plugins/OscilloscopePlugin.cpp
+    src/plugins/WaveformOverviewPlugin.cpp
 )
 
 set(SS_UI_SOURCES

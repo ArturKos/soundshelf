@@ -91,6 +91,11 @@ public:
     /// independently of the playback pipeline.
     void pushVisualizationPcm(const QVector<float>& monoPcm);
 
+    /// Returns the last PCM frame pushed via pushVisualizationPcm (mono, [−1, 1]).
+    /// Used by SpectrumWidget to forward the live PCM buffer to WantPcm plugins
+    /// such as OscilloscopePlugin.
+    const QVector<float>& visualizationPcm() const { return m_visPcm; }
+
     /// Pure FFT helper: Hann-windowed magnitude spectrum of @p monoPcm folded
     /// into @p bars logarithmically spaced bands (≈20 Hz–20 kHz), each 0..1.
     /// Returns all-zero bars when FFTW3 is not compiled in.

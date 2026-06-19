@@ -38,9 +38,14 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* ev) override;
+    /// Forwards click-to-seek when the active plugin is a WaveformOverviewPlugin.
+    void mousePressEvent(QMouseEvent* ev) override;
+    /// Forwards drag-to-seek when the active plugin is a WaveformOverviewPlugin.
+    void mouseMoveEvent(QMouseEvent* ev) override;
 
 private:
     void drawBuiltinBars(QPainter& p);
+    void handleWaveformSeek(double x);
 
     PlayerEngine*        m_engine = nullptr;
     VisualizationPlugin* m_plugin = nullptr;
