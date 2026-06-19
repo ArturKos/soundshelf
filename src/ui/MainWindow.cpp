@@ -52,6 +52,9 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QTabWidget>
+#include <QComboBox>
+#include "soundshelf/plugins/OscilloscopePlugin.hpp"
+#include "soundshelf/plugins/WaveformOverviewPlugin.hpp"
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -185,12 +188,38 @@ void MainWindow::setupUi() {
     auto* rightDock = new QDockWidget(tr("Now playing"), this);
     rightDock->setObjectName(QStringLiteral("RightDock"));
     m_rightTabs = new QTabWidget(rightDock);
-    m_spectrum = new SpectrumWidget(m_rightTabs);
     m_eq       = new EqualizerWidget(m_rightTabs);
     m_lyrics   = new LyricsWidget(m_rightTabs);
-    m_rightTabs->addTab(m_spectrum, tr("Spectrum"));
+
+    // "Spectrum" tab = a mode selector on top + the SpectrumWidget. The selector
+    // switches the cross-platform visualisations (bars / oscilloscope / waveform).
+    auto* visTab = new QWidget(m_rightTabs);
+    auto* visLay = new QVBoxLayout(visTab);
+    visLay->setContentsMargins(0, 0, 0, 0);
+    auto* visMode = new QComboBox(visTab);
+    visMode->addItem(tr("Spectrum bars"));
+    visMode->addItem(tr("Oscilloscope"));
+    visMode->addItem(tr("Waveform overview"));
+    m_spectrum = new SpectrumWidget(visTab);
+    visLay->addWidget(visMode);
+    visLay->addWidget(m_spectrum, 1);
+
+    m_rightTabs->addTab(visTab,   tr("Spectrum"));
     m_rightTabs->addTab(m_eq,       tr("Equalizer"));
     m_rightTabs->addTab(m_lyrics,   tr("Lyrics"));
+
+    // Visualisation plugins (parented to this so they outlive the lambda).
+    auto* oscPlugin  = new OscilloscopePlugin(this);
+    auto* wavePlugin = new WaveformOverviewPlugin(this);
+    connect(visMode, &QComboBox::currentIndexChanged, this,
+            [this, oscPlugin, wavePlugin](int idx) {
+        switch (idx) {
+            case 1:  m_spectrum->setActivePlugin(oscPlugin);  break;
+            case 2:  m_spectrum->setActivePlugin(wavePlugin); break;
+            default: m_spectrum->setActivePlugin(nullptr);    break;  // built-in bars
+        }
+    });
+    wavePlugin->setEngine(m_engine);  // connects trackChanged → recompute envelope + enables seek
     rightDock->setWidget(m_rightTabs);
     rightDock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, rightDock);

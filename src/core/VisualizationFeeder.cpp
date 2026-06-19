@@ -34,6 +34,14 @@ void VisualizationFeeder::attachEngine(PlayerEngine* engine)
             this, &VisualizationFeeder::onTrackChanged);
     connect(engine, &PlayerEngine::stateChanged,
             this, &VisualizationFeeder::onStateChanged);
+    // The feed timer runs continuously once attached. Gating it on
+    // stateChanged() is fragile: a `loadfile replace` on a track switch makes
+    // mpv emit a transient END_FILE → stateChanged(Stopped) AFTER play()'s
+    // Playing, which used to stop the timer with no later Playing to restart it
+    // — so the spectrum froze on every track after the first. Keeping the timer
+    // always on and deciding the content per-tick from the engine state makes
+    // the feeder immune to that event ordering.
+    m_timer->start();
 }
 
 QVector<float> VisualizationFeeder::monoWindowAt(const PcmDecoder::PcmBuffer& pcm,
@@ -87,28 +95,25 @@ void VisualizationFeeder::onTrackChanged(const soundshelf::Track& track)
 
 void VisualizationFeeder::onStateChanged(soundshelf::PlayerState state)
 {
-    switch (state) {
-        case PlayerState::Playing:
-            m_timer->start();
-            break;
-        case PlayerState::Paused:
-            m_timer->stop();
-            pushSilence();
-            break;
-        case PlayerState::Stopped:
-            m_timer->stop();
-            pushSilence();
-            break;
-        case PlayerState::Buffering:
-            m_timer->stop();
-            break;
-    }
+    // Track state in our own member (not PlayerEngine::state()) so the feed is
+    // driven by the same signal the tests emit, and push an immediate silence
+    // frame on pause/stop so the bars drop without waiting for the next tick.
+    m_lastState = state;
+    if (state == PlayerState::Paused || state == PlayerState::Stopped)
+        pushSilence();
 }
 
 void VisualizationFeeder::onTimerTick()
 {
-    if (!m_engine || m_pcmBuffer.s16le.isEmpty())
+    if (!m_engine)
         return;
+    // Only render live audio while Playing with a decoded buffer; otherwise feed
+    // silence so the visualiser reads zero (paused/stopped, or the new track's
+    // decode still in flight right after a switch).
+    if (m_lastState != PlayerState::Playing || m_pcmBuffer.s16le.isEmpty()) {
+        pushSilence();
+        return;
+    }
     const auto win = monoWindowAt(m_pcmBuffer, m_engine->positionMs(), m_windowSamples);
     m_engine->pushVisualizationPcm(win);
 }

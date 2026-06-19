@@ -136,6 +136,16 @@ void PlayerEngine::handleMpvEvents() {
                 emit stateChanged(m_state);
                 break;
             }
+            case MPV_EVENT_FILE_LOADED: {
+                // A new file actually started — on a track switch mpv first emits
+                // END_FILE (→Stopped) for the previous file, so without this the
+                // engine would be left reporting Stopped while the new track
+                // plays (which froze the spectrum visualiser on every track
+                // after the first). Re-assert Playing here.
+                m_state = PlayerState::Playing;
+                emit stateChanged(m_state);
+                break;
+            }
             case MPV_EVENT_LOG_MESSAGE: {
                 auto* msg = static_cast<mpv_event_log_message*>(ev->data);
                 qCDebug(lcPlayer) << "[mpv]" << msg->prefix << msg->level << msg->text;

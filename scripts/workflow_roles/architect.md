@@ -12,6 +12,11 @@ so derive everything from the repository.
    code** whether it is in fact already done (feature present + Doxygen + unit
    tests that build & pass + builds clean). If it is, tick it `✅` in
    `BACKLOG.md` (edit the file) and move on. Section D items take priority.
+   - **Pure GUI / audio-visual items** (on-screen rendering, audible playback,
+     live visualisation, real-time widget interaction) CANNOT be verified by this
+     loop — the tester never launches the GUI or hears audio. When such an item's
+     code + unit-tested seams are done, mark it **`🔬`** (code-complete, awaiting
+     human GUI/audio check), NOT `✅`. Never assert a visual/audible behaviour works.
 3. Pick the **next genuinely-unfinished `⬜`** item as this iteration's task.
    Write a precise, self-contained spec the programmer can execute without
    guessing: what to implement, in which files/layer, the public API shape, and
@@ -37,7 +42,8 @@ so derive everything from the repository.
 - Do not change scope mid-iteration or pick more than one feature.
 
 ## If everything is implemented
-If every item in BACKLOG sections A, B and D is `✅` (verified against the code,
+If every item in BACKLOG sections A, B and D is `✅` or `🔬` (verified against the
+code — `🔬` = code-complete, awaiting the human's on-screen/audible confirmation;
 with only "Out of scope" section C remaining), the project is **complete**: set
 status to "all_implemented" and STOP. Do not manufacture extra work to keep the
 loop going.

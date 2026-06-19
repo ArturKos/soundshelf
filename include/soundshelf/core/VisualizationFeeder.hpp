@@ -120,6 +120,7 @@ private:
     int                   m_windowSamples = 1024;
     int                   m_decodeEpoch   = 0;
     DecodeFn              m_decoder;
+    PlayerState           m_lastState     = PlayerState::Stopped;  ///< from stateChanged()
 };
 
 } // namespace soundshelf

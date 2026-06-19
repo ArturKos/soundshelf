@@ -35,6 +35,13 @@ task touched CI, at most run `GH_TOKEN=$(cat ~/git_token) gh run list --limit 1`
 once to note the LAST COMPLETED run's status, then decide immediately. Never
 stall waiting for an in-progress run — emit your verdict now.
 
+## GUI / audio behaviour is NOT yours to certify
+You run headless — you do NOT launch the GUI or hear audio. So you can only
+verify the **code seams + unit tests** for visual/audible features (spectrum,
+oscilloscope, EQ audibility, lyrics rendering, etc.), never that they actually
+look/sound right on screen. Pass them on the seams; the architect marks such
+items `🔬` (needs human check), not `✅`. Don't claim a visual/audible behaviour works.
+
 ## Decision
 - Linux build+tests pass AND Windows build exit code 0 → "pass".
 - Otherwise → "fail" with the failing log tail and which side broke.
